@@ -47,7 +47,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	for {
+	for range 10 {
 		_, err := conn.Write(serializedData)
 		if err != nil {
 			log.Println("failed writing")
