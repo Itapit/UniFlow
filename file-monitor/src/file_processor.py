@@ -2,11 +2,8 @@ import hashlib
 import math
 import os
 from dataclasses import dataclass
+from config import SYMBOL_SIZE_BYTES, K_SOURCE_SYMBOLS, M_PARITY_SYMBOLS, BUFFER_CHUNK_SIZE
 
-SYMBOL_SIZE_BYTES = 1400  # MTU compliant payload limit
-K_SOURCE_SYMBOLS = 10     # source symbols per block
-M_PARITY_SYMBOLS = 2      # reed-Solomon parity symbols per block
-BUFFER_CHUNK_SIZE = 64 * 1024  # 64 KB read buffer for hashing
 
 # data class is a python object dedicted for storing data without all the init functions (has special functionalities like comperision).
 @dataclass
