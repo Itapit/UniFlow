@@ -10,9 +10,6 @@ def watch_directory(target_dir: str):
 
     inotify = INotify()
 
-    # Watch mask:
-    # IN_CLOSE_WRITE: Triggers when a file that was opened for writing is finally closed.
-    # IN_MOVED_TO: Triggers when a file is moved/pasted into the folder from elsewhere.
     #creating the file descriptor watcher that triggered when the folder is attched to is changed by the flags below:
     watch_flags = flags.CLOSE_WRITE | flags.MOVED_TO
     watch_descriptor = inotify.add_watch(target_path, watch_flags)
@@ -21,21 +18,15 @@ def watch_directory(target_dir: str):
 
     try:
         while True:
-            # Blocking call: waits efficiently in kernel until an event fires
             events = inotify.read()
             for event in events:
-                # Ignore temporary directory creations; only handle regular files
                 if event.mask & flags.ISDIR:
                     continue
 
                 filename = event.name
-                # Ignore hidden files or active partial download markers
-                if filename.startswith('.'):
-                    continue
-
+                
                 full_path = os.path.join(target_path, filename)
 
-                # Confirm file exists and is accessible
                 if os.path.isfile(full_path):
                     file_size = os.path.getsize(full_path)
                     print(f"[Event Detected] Ready: {full_path} ({file_size} bytes)")
