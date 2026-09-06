@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	rd "senders/internal/reader"
 )
@@ -59,18 +61,25 @@ _ = os.WriteFile("../test/big_test.txt", data, 0644)
 	if(err!=nil){
 		return
 	}
-	fmt.Println(reader.Size())
-	i:=int64(0)
-	for i < int64(reader.Size()){
+	fmt.Printf("File size from mmap: %d bytes\n", reader.Size())
 
-		data,err:=reader.ReadChunk(i)
-		if(err!=nil){
-			fmt.Println(err)
-			break
-		}
-		fmt.Println(data)
-		fmt.Println("------------------------------------------")
-		i+=134400
+	offset := int64(0)
+	blockIndex := 0
+
+	for offset < int64(reader.Size()) {
+    	data, err := reader.ReadChunk(offset)
+    	if err != nil {
+        	if errors.Is(err, io.EOF) {
+            	break
+        	}
+        	fmt.Printf("Read error at block %d: %v\n", blockIndex, err)
+        	break
+    	}
+    	fmt.Printf("Successfully read Block #%d: %d bytes (Offset: %d)\n", blockIndex, len(data), offset)
+    	fmt.Println("------------------------------------------")
+
+    	offset += int64(len(data))
+    	blockIndex++
 	}
 	reader.Close()
 }

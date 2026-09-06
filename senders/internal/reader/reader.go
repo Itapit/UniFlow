@@ -1,7 +1,9 @@
 package reader
 
 import (
+	"errors"
 	"fmt"
+	"io"
 
 	"golang.org/x/exp/mmap"
 )
@@ -30,11 +32,22 @@ func (mf *MappedFile) Size() int {
 }
 
 func (mf *MappedFile) ReadChunk(offset int64) ([]byte, error) {
-	buf := make([]byte, chunkSize)
+	if offset >= int64(mf.size) {
+		return nil, io.EOF
+	}
+
+	remaining := int64(mf.size) - offset
+	toRead := chunkSize
+	if remaining < int64(toRead) {
+		toRead = int(remaining)
+	}
+
+	buf := make([]byte, toRead)
 	n, err := mf.reader.ReadAt(buf, offset)
-	if err != nil && n == 0 {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("failed reading chunk at offset %d: %w", offset, err)
 	}
+
 	return buf[:n], nil
 }
 
