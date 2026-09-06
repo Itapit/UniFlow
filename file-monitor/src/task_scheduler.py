@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Dict, Optional
-from config import TEN_MB_BYTES, ONE_GB_BYTES, SENDER_SOCKETS
+from src.config import TEN_MB_BYTES, ONE_GB_BYTES, SENDER_SOCKETS
 from file_processor import FileMetadata
 
 @dataclass
