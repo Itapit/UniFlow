@@ -7,8 +7,6 @@ import (
 	"net"
 	"senders/internal/pb"
 	"time"
-
-	"golang.org/x/exp/mmap"
 )
 
 func main() {
@@ -57,19 +55,5 @@ func main() {
 		time.Sleep(1 * time.Second) // השהייה לצורך בדיקה נקייה
 
 	}
-	reader, err := mmap.Open("../test/test.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fileLength := reader.Len()
-	fmt.Println(fileLength)
-	buf := make([]byte, fileLength)
-	_, err = reader.ReadAt(buf, 0)
-	if err != nil {
-	}
-	err = reader.Close()
-	fmt.Println(string(buf))
-	if err != nil {
-		return
-	}
+	
 }

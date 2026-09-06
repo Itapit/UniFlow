@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	defaultDataShrads   = 128
-	defaultParityShards = 64
+	defaultDataShrads   = 100
+	defaultParityShards = 50
 	maxShardSize       = 1344
 	maxBlockSize        = defaultDataShrads * maxShardSize
 )
