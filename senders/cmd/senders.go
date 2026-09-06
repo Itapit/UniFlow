@@ -1,18 +1,23 @@
 package main
 
 import (
-	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
-	"os"
+	"log"
+	"net"
+	"senders/internal/pb"
 	rd "senders/internal/reader"
+	"time"
 )
+const(
+	blockSize=134400
 
+)
 func main() {
-	data := bytes.Repeat([]byte("A quick brown fox jumps over the lazy dog. "), 12000)
-_ = os.WriteFile("../test/big_test.txt", data, 0644)
-	/*targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
+	
+	targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
 	flag.Parse()
 
 	mockPayload := []byte("Hello, UniFlow network!")
@@ -54,9 +59,10 @@ _ = os.WriteFile("../test/big_test.txt", data, 0644)
 		} else {
 			log.Println("packet sent")
 		}
-		time.Sleep(1 * time.Second) // השהייה לצורך בדיקה נקייה
+		time.Sleep(1 * time.Second) 
 
-	}*/
+	}
+//--------------------------------------------------------------------------
 	reader,err:= rd.OpenFile("../test/big_test.txt")
 	if(err!=nil){
 		return
@@ -65,8 +71,10 @@ _ = os.WriteFile("../test/big_test.txt", data, 0644)
 
 	offset := int64(0)
 	blockIndex := 0
-
-	for offset < int64(reader.Size()) {
+	readerSize:=reader.Size()
+	//totalBlock:=readerSize/blockSize
+	
+	for offset < int64(readerSize) {
     	data, err := reader.ReadChunk(offset)
     	if err != nil {
         	if errors.Is(err, io.EOF) {
@@ -77,9 +85,12 @@ _ = os.WriteFile("../test/big_test.txt", data, 0644)
     	}
     	fmt.Printf("Successfully read Block #%d: %d bytes (Offset: %d)\n", blockIndex, len(data), offset)
     	fmt.Println("------------------------------------------")
-
+		
     	offset += int64(len(data))
+		
+		
     	blockIndex++
 	}
 	reader.Close()
+//------------------------------------------------------------------------------------------
 }

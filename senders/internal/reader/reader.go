@@ -54,3 +54,4 @@ func (mf *MappedFile) ReadChunk(offset int64) ([]byte, error) {
 func (mf *MappedFile) Close() error {
 	return mf.reader.Close()
 }
+
