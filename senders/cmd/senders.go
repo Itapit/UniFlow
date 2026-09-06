@@ -1,16 +1,16 @@
 package main
 
 import (
-	"flag"
+	"bytes"
 	"fmt"
-	"log"
-	"net"
-	"senders/internal/pb"
-	"time"
+	"os"
+	rd "senders/internal/reader"
 )
 
 func main() {
-	targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
+	data := bytes.Repeat([]byte("A quick brown fox jumps over the lazy dog. "), 12000)
+_ = os.WriteFile("../test/big_test.txt", data, 0644)
+	/*targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
 	flag.Parse()
 
 	mockPayload := []byte("Hello, UniFlow network!")
@@ -54,6 +54,23 @@ func main() {
 		}
 		time.Sleep(1 * time.Second) // השהייה לצורך בדיקה נקייה
 
+	}*/
+	reader,err:= rd.OpenFile("../test/big_test.txt")
+	if(err!=nil){
+		return
 	}
-	
+	fmt.Println(reader.Size())
+	i:=int64(0)
+	for i < int64(reader.Size()){
+
+		data,err:=reader.ReadChunk(i)
+		if(err!=nil){
+			fmt.Println(err)
+			break
+		}
+		fmt.Println(data)
+		fmt.Println("------------------------------------------")
+		i+=134400
+	}
+	reader.Close()
 }
