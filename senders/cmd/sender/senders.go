@@ -22,6 +22,7 @@ func main() {
 
 	const filePath = "../test/big_test.txt"
 
+	
 	addr, err := net.ResolveUDPAddr("udp", *targetAddrStr)
 	if err != nil {
 		log.Fatal(err)
