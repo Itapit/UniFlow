@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package uniflow;
+
+option go_package = "./pb";
+
+enum SessionMode {
+  SINGLE_SENDER = 0;  // For files < 10MB
+  DISTRIBUTED   = 1;  // For files 10MB-1GB
+}
+
+message TaskAssignment {
+  // file access on local disk
+  string file_path = 1;
+
+  // worker assignment
+  SessionMode mode = 10;
+}
+message FileHash {
+  string file_path = 1;
+  // global file parameters
+  uint64 file_hash = 3;
+}
