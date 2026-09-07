@@ -13,3 +13,11 @@ SENDER_SOCKETS = {
     2: "/tmp/uniflow_sender_2.sock",
     3: "/tmp/uniflow_sender_3.sock"
 }
+
+from pathlib import Path
+
+# defenition of repo root 
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Central inbox folder
+WATCH_DIR = str(REPO_ROOT / "data" / "tx_inbox")
