@@ -2,7 +2,7 @@ package pb
 
 import (
 	"fmt"
-
+	"hash/crc32"
 	proto "google.golang.org/protobuf/proto"
 )
 
@@ -37,3 +37,8 @@ func FormatPacket(
 
 	return data, nil
 } 
+
+func CalculateCRC(data []byte) uint32 {
+	crcTable := crc32.MakeTable(crc32.Castagnoli)
+    return crc32.Checksum(data, crcTable)
+}

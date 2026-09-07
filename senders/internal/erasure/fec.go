@@ -2,41 +2,37 @@ package erasure
 
 import (
 	"fmt"
+	"senders/internal/constants"
 
 	"github.com/klauspost/reedsolomon"
 )
 
-const (
-	defaultDataShrads   = 100
-	defaultParityShards = 50
-	maxShardSize       = 1344
-	maxBlockSize        = defaultDataShrads * maxShardSize
-)
+
 
 func EncodeBlock(block []byte) ([][]byte,error) {
-	if len(block) > maxBlockSize {
-		return nil, fmt.Errorf("block size: %d is to big, max size: %d",len(block),maxBlockSize)
+	if len(block) > constants.MaxBlockSize {
+		return nil, fmt.Errorf("block size: %d is to big, max size: %d",len(block),constants.MaxBlockSize)
 	}
-	enc, err:=reedsolomon.New(defaultDataShrads,defaultParityShards);
+	enc, err:=reedsolomon.New(constants.DefaultDataShrads,constants.DefaultParityShards);
 
 	if err !=nil{
 
 		return nil, fmt.Errorf("encoder failed to construct: %w",err)
 
 	}
-	data:=make([][]byte,defaultDataShrads+defaultParityShards)
+	data:=make([][]byte,constants.DefaultDataShrads+constants.DefaultParityShards)
 
-	for i :=range defaultDataShrads+defaultParityShards{
-		data[i]=make([]byte, maxShardSize)
+	for i :=range constants.DefaultDataShrads+constants.DefaultParityShards{
+		data[i]=make([]byte, constants.MaxShardSize)
 	}
 
-	for i := range defaultDataShrads {
-		start := i * maxShardSize
+	for i := range constants.DefaultDataShrads {
+		start := i * constants.MaxShardSize
 		if start >= len(block) {
 			break 
 		}
 
-		end := start + maxShardSize
+		end := start + constants.MaxShardSize
 		if end > len(block) {
 			end = len(block)
 		}

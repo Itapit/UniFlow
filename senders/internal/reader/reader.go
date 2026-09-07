@@ -3,14 +3,15 @@ package reader
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
+	"os"
+	"senders/internal/constants"
 
 	"golang.org/x/exp/mmap"
 )
 
-const (
-	chunkSize = 134400
-)
+
 type MappedFile struct {
 	reader *mmap.ReaderAt
 	size   int
@@ -37,7 +38,7 @@ func (mf *MappedFile) ReadChunk(offset int64) ([]byte, error) {
 	}
 
 	remaining := int64(mf.size) - offset
-	toRead := chunkSize
+	toRead := constants.ChunkSize
 	if remaining < int64(toRead) {
 		toRead = int(remaining)
 	}
@@ -53,5 +54,17 @@ func (mf *MappedFile) ReadChunk(offset int64) ([]byte, error) {
 
 func (mf *MappedFile) Close() error {
 	return mf.reader.Close()
+}
+func GenerateFileHash(path string) (uint64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get file stat for hash: %w", err)
+	}
+
+	fingerprint := fmt.Sprintf("%s:%d:%d", info.Name(), info.Size(), info.ModTime().UnixNano())
+
+	h := fnv.New64a()
+	h.Write([]byte(fingerprint))
+	return h.Sum64(), nil
 }
 
