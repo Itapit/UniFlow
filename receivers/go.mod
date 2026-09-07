@@ -1,4 +1,4 @@
-module recivers
+module receivers
 
 go 1.27.0
 
