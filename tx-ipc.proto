@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package uniflow;
+option go_package = "./pb";
+
+enum SenderState {
+  IDLE = 0;
+  WORKING = 1;
+}
+
+// TX File Monitor -> TX Sender
+message TaskAssignment {
+  string file_path = 1;
+  uint64 file_hash = 2; // Sent to RX for final integrity validation
+  uint32 port = 3;      // Target UDP port on the RX machine
+}
+
+// TX File Monitor -> TX Sender
+message Ping {
+  // Empty message to trigger a state report
+}
+
+// TX Sender -> TX File Monitor
+message Heartbeat {
+  SenderState state = 1;
+}
