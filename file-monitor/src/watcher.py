@@ -29,7 +29,11 @@ def watch_directory(target_dir: str):
 
                 if os.path.isfile(full_path):
                     file_size = os.path.getsize(full_path)
+                    if file_size == 0:
+                        continue
+                    
                     print(f"[Event Detected] Ready: {full_path} ({file_size} bytes)")
+                    yield str(full_path)
                     
                     # Next step in pipeline: hand the full path to the senders.
                     #TODO: inside the tx folder in creation mode event of a file with 0 bytes is sent need to check special condition.
@@ -42,4 +46,6 @@ def watch_directory(target_dir: str):
 
 if __name__ == "__main__":
     folder_to_watch = "./data/tx_inbox"
-    watch_directory(folder_to_watch)
+    # Consuming the generator in a loop so it actively listens
+    for ready_file_path in watch_directory(folder_to_watch):
+        print(f"[Consumer Received] Ready to process: {ready_file_path}")
