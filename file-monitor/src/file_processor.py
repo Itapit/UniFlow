@@ -1,27 +1,23 @@
-import hashlib
-import math
 import os
+import hashlib
 from dataclasses import dataclass
-from config import SYMBOL_SIZE_BYTES, K_SOURCE_SYMBOLS, M_PARITY_SYMBOLS, BUFFER_CHUNK_SIZE
 
+# 64 KB buffer ensures we don't blow up RAM when hashing 1GB files
+BUFFER_CHUNK_SIZE = 64 * 1024  
 
-# data class is a python object dedicted for storing data without all the init functions (has special functionalities like comperision).
+# build in python class to save values it has build in comperators etc.
 @dataclass
 class FileMetadata:
     file_path: str
     file_name: str
     file_size: int
-    file_hash: int          # 64-bit integer digest for Protobuf
-    total_blocks: int
-    k_symbols: int
-    n_symbols: int
-    symbol_size: int
+    file_hash: int
 
-# The purpose of the function is to read 8 bits of the file update the state of the hash and then take the next 8 bits
 def compute_file_hash(file_path: str) -> int:
+    # computes a 64-bit from SHA256 hash for Protobuf compatibility.
     hasher = hashlib.sha256()
     
-    # use OS file descriptor
+    # Using OS-level file descriptors is generally faster for raw byte processing
     file_descriptor = os.open(file_path, os.O_RDONLY)
     try:
         while True:
@@ -32,45 +28,32 @@ def compute_file_hash(file_path: str) -> int:
     finally:
         os.close(file_descriptor)
 
-    # take first 8 bytes of the digest to fit protobuf uint64
+    # Slice the first 8 bytes of the digest and convert to a standard unsigned integer
     digest_bytes = hasher.digest()[:8]
     return int.from_bytes(digest_bytes, byteorder="big", signed=False)
 
 def process_file(file_path: str) -> FileMetadata:
-    """Inspects file parameters and calculates transmission dimensions."""
+    # extracts required metadata and computes the file hash.
     file_size = os.path.getsize(file_path)
     file_name = os.path.basename(file_path)
-    
-    
     file_hash = compute_file_hash(file_path)
-    
-    # block dimension math:
-    # block contains (K * SYMBOL_SIZE) data bytes
-    bytes_per_block = K_SOURCE_SYMBOLS * SYMBOL_SIZE_BYTES
-    total_blocks = math.ceil(file_size / bytes_per_block) if file_size > 0 else 1
-    
-    n_symbols = K_SOURCE_SYMBOLS + M_PARITY_SYMBOLS
 
     return FileMetadata(
         file_path=file_path,
         file_name=file_name,
         file_size=file_size,
-        file_hash=file_hash,
-        total_blocks=total_blocks,
-        k_symbols=K_SOURCE_SYMBOLS,
-        n_symbols=n_symbols,
-        symbol_size=SYMBOL_SIZE_BYTES
+        file_hash=file_hash
     )
 
 if __name__ == "__main__":
-    import sys
-    test_path =  "test.txt"
-    if not os.path.exists(test_path):
-        with open(test_path, "wb") as f:
-            f.write(b"UniFlow test content" * 100)
-            
-    meta = process_file(test_path)
+    # Quick standalone test
+    test_file = "dummy_test.bin"
+    with open(test_file, "wb") as f:
+        f.write(os.urandom(1024 * 1024)) # Write 1MB of random data
+        
+    meta = process_file(test_file)
     print(f"File: {meta.file_name}")
     print(f"Size: {meta.file_size} bytes")
     print(f"Hash (uint64): {meta.file_hash}")
-    print(f"Total Blocks: {meta.total_blocks}")
+    
+    os.remove(test_file)
