@@ -10,6 +10,7 @@ import (
 	"os"
 	ipc "senders/internal/IPC"
 	"senders/internal/constants"
+	"senders/internal/counter"
 	rs "senders/internal/erasure"
 	"senders/internal/pb"
 	rd "senders/internal/reader"
@@ -19,7 +20,7 @@ func main() {
 
 	targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
 	socketPath := flag.String("socket", "/tmp/monitor.sock", "Path to Unix domain socket for IPC")
-	//counterFileName := flag.String("counter-file", "sender_counter.bin", "counter coordination file")
+	counterFileName := flag.String("counter-file", "sender_counter.bin", "counter coordination file")
 	
 	flag.Parse()
 
@@ -33,6 +34,11 @@ func main() {
 
 	defer listener.Close()
 	defer os.Remove(*socketPath)
+
+
+	counterFile,_:=counter.InitCounterFile(constants.CounterFilePath+*counterFileName)
+	//count,err:=counter.Count(counterFile)
+	defer counterFile.Close()
 
 
 	addr, err := net.ResolveUDPAddr("udp", *targetAddrStr)
