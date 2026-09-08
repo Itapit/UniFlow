@@ -4,15 +4,15 @@
 // 	protoc        v7.36.0
 // source: rx-ipc.proto
 
-package __
+package pb
 
 import (
-	pb "./pb"
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 type SymbolBatch struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ReceiverId    uint32                 `protobuf:"varint,1,opt,name=receiver_id,json=receiverId,proto3" json:"receiver_id,omitempty"`
-	Packets       []*pb.Packet           `protobuf:"bytes,2,rep,name=packets,proto3" json:"packets,omitempty"` // max 30, flushed every 100ms
+	Packets       []*Packet           `protobuf:"bytes,2,rep,name=packets,proto3" json:"packets,omitempty"` // max 30, flushed every 100ms
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -67,7 +67,7 @@ func (x *SymbolBatch) GetReceiverId() uint32 {
 	return 0
 }
 
-func (x *SymbolBatch) GetPackets() []*pb.Packet {
+func (x *SymbolBatch) GetPackets() []*Packet {
 	if x != nil {
 		return x.Packets
 	}
@@ -99,7 +99,7 @@ func file_rx_ipc_proto_rawDescGZIP() []byte {
 var file_rx_ipc_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_rx_ipc_proto_goTypes = []any{
 	(*SymbolBatch)(nil), // 0: uniflow.SymbolBatch
-	(*pb.Packet)(nil),   // 1: uniflow.Packet
+	(*Packet)(nil),   // 1: uniflow.Packet
 }
 var file_rx_ipc_proto_depIdxs = []int32{
 	1, // 0: uniflow.SymbolBatch.packets:type_name -> uniflow.Packet
