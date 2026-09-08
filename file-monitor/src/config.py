@@ -15,3 +15,9 @@ SENDERS_CONFIG = {
     2: {"port": 5002, "socket_path": "/tmp/uniflow_sender_2.sock"},
     3: {"port": 5003, "socket_path": "/tmp/uniflow_sender_3.sock"}
 }
+
+sender_states = {
+    "/tmp/uniflow_sender_1.sock": "IDLE",
+    "/tmp/uniflow_sender_2.sock": "IDLE",
+    "/tmp/uniflow_sender_3.sock": "IDLE"
+}
