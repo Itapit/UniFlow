@@ -19,7 +19,7 @@ func main() {
 
 	targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
 	socketPath := flag.String("socket", "/tmp/monitor.sock", "Path to Unix domain socket for IPC")
-	//counterPath := flag.String("counter-file", "/tmp/sender_counter.lock", "Path to state/counter coordination file")
+	//counterFileName := flag.String("counter-file", "sender_counter.bin", "counter coordination file")
 	
 	flag.Parse()
 
