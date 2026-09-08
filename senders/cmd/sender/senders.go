@@ -18,18 +18,21 @@ import (
 func main() {
 
 	targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
+	socketPath := flag.String("socket", "/tmp/monitor.sock", "Path to Unix domain socket for IPC")
+	//counterPath := flag.String("counter-file", "/tmp/sender_counter.lock", "Path to state/counter coordination file")
+	
 	flag.Parse()
 
 	channel:=make(chan string)
 
-	listener,err:=ipc.StartUDSServer()
+	listener,err:=ipc.StartUDSServer(*socketPath)
 	if err != nil {
     	log.Fatal(err)
 	}
 	go ipc.HandleConn(listener,channel)
 
 	defer listener.Close()
-	defer os.Remove(ipc.SocketPath)
+	defer os.Remove(*socketPath)
 
 
 	addr, err := net.ResolveUDPAddr("udp", *targetAddrStr)

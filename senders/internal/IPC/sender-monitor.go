@@ -10,14 +10,13 @@ import (
 	"strings"
 )
 
-const SocketPath = "/tmp/monitor.sock"
 
-func StartUDSServer() (net.Listener, error) {
-	if err := os.Remove(SocketPath); err != nil && !os.IsNotExist(err) {
+func StartUDSServer(socketPath string) (net.Listener, error) {
+	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
 		log.Fatalf("Failed to remove old socket file: %v", err)
 	}
 
-	listener, err := net.Listen("unix", SocketPath)
+	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start UDS server: %w", err)
 	}

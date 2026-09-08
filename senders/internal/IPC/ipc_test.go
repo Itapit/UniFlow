@@ -10,12 +10,13 @@ import (
 
 	ipc "senders/internal/IPC"
 )
+const SocketPath = "/tmp/monitor.sock"
 
 func TestUDSServer(t *testing.T) {
-	_ = os.Remove(ipc.SocketPath)
-	defer os.Remove(ipc.SocketPath)
+	_ = os.Remove(SocketPath)
+	defer os.Remove(SocketPath)
 
-	listener, err := ipc.StartUDSServer()
+	listener, err := ipc.StartUDSServer(SocketPath)
 	if err != nil {
 		t.Fatalf("Failed to start UDS server: %v", err)
 	}
@@ -24,7 +25,7 @@ func TestUDSServer(t *testing.T) {
 	fileChan := make(chan string)
 	go ipc.HandleConn(listener, fileChan)
 
-	conn, err := net.Dial("unix", ipc.SocketPath)
+	conn, err := net.Dial("unix", SocketPath)
 	if err != nil {
 		t.Fatalf("Failed connecting to socket: %v", err)
 	}
