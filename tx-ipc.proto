@@ -1,25 +1,25 @@
 syntax = "proto3";
 
 package uniflow;
-
 option go_package = "./pb";
 
-enum SessionMode {
-  SINGLE_SENDER = 0;  // For files < 10MB
-  DISTRIBUTED   = 1;  // For files 10MB-1GB
+enum SenderState {
+  IDLE = 0;
+  WORKING = 1;
 }
 
+// TX File Monitor -> TX Sender
 message TaskAssignment {
-  // file access on local disk
   string file_path = 1;
-
-  // worker assignment
-  SessionMode mode = 10;
-  uint32 port = 11;
-
+  uint64 file_hash = 2; // Sent to RX for final integrity validation
 }
-message FileHash {
-  string file_path = 1;
-  // global file parameters
-  uint64 file_hash = 3;
+
+// TX File Monitor -> TX Sender
+message Ping {
+  // Empty message to trigger a state report
+}
+
+// TX Sender -> TX File Monitor
+message Heartbeat {
+  SenderState state = 1;
 }

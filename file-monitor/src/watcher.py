@@ -1,51 +1,79 @@
 import os
-import sys
+import threading
+import queue
 from inotify_simple import INotify, flags
 
-def watch_directory(target_dir: str):
-    # ensure the data directory exists
-    target_path = os.path.abspath(target_dir)
-    if not os.path.isdir(target_path):
-        os.makedirs(target_path, exist_ok=True)
+from src.file_processor import process_file 
 
-    inotify = INotify()
+class FileWatcher(threading.Thread):
+    def __init__(self, watch_dir: str, task_queue: queue.Queue):
+        # daemon=True ensures this thread closes when main.py exits
+        super().__init__(daemon=True) 
+        self.watch_dir = watch_dir
+        self.task_queue = task_queue
+        
+        if not os.path.isdir(self.watch_dir):
+            os.makedirs(self.watch_dir, exist_ok=True)
 
-    #creating the file descriptor watcher that triggered when the folder is attched to is changed by the flags below:
-    watch_flags = flags.CLOSE_WRITE | flags.MOVED_TO
-    watch_descriptor = inotify.add_watch(target_path, watch_flags)
+    def run(self):
+        inotify = INotify()
 
-    print(f"[File Monitor] Listening for new/modified files in: {target_path}")
+        # create the file descriptor watcher
+        watch_flags = flags.CLOSE_WRITE | flags.MOVED_TO
+        watch_descriptor = inotify.add_watch(self.watch_dir, watch_flags)
 
-    try:
-        while True:
-            events = inotify.read()
-            for event in events:
-                if event.mask & flags.ISDIR:
-                    continue
+        print(f"[Watcher] Listening for new/modified files in: {self.watch_dir}")
 
-                filename = event.name
-                
-                full_path = os.path.join(target_path, filename)
-
-                if os.path.isfile(full_path):
-                    file_size = os.path.getsize(full_path)
-                    if file_size == 0:
+        try:
+            while True:
+                events = inotify.read()
+                for event in events:
+                    if event.mask & flags.ISDIR:
                         continue
-                    
-                    print(f"[Event Detected] Ready: {full_path} ({file_size} bytes)")
-                    yield str(full_path)
-                    
-                    # Next step in pipeline: hand the full path to the senders.
-                    #TODO: inside the tx folder in creation mode event of a file with 0 bytes is sent need to check special condition.
 
-    except KeyboardInterrupt:
-        print("\n[File Monitor] Stopping watcher...")
-    finally:
-        inotify.rm_watch(watch_descriptor)
-        inotify.close()
+                    filename = event.name
+                    full_path = os.path.join(self.watch_dir, filename)
+
+                    if os.path.isfile(full_path):
+                        file_size = os.path.getsize(full_path)
+                        
+                        # filter out 0-byte creation artifacts
+                        if file_size == 0:
+                            continue
+                        
+                        print(f"[Watcher Detected] Ready: {full_path} ({file_size} bytes)")
+                        
+                        # Process hash and size
+                        try:
+                            metadata = process_file(full_path)
+                            # Push to the thread-safe queue for the orchestrator
+                            self.task_queue.put(metadata)
+                            print(f"[Watcher] Queued: {event.name}")
+                        except Exception as e:
+                            print(f"[Watcher Error] Failed to process {event.name}: {e}")
+                            
+        except Exception as e:
+            # Catch general thread exceptions since KeyboardInterrupt goes to the main thread
+            print(f"\n[Watcher] Thread stopping: {e}")
+        finally:
+            inotify.rm_watch(watch_descriptor)
+            inotify.close()
 
 if __name__ == "__main__":
+    import time
+    
+    # Dummy test block for the new class
     folder_to_watch = "./data/tx_inbox"
-    # Consuming the generator in a loop so it actively listens
-    for ready_file_path in watch_directory(folder_to_watch):
-        print(f"[Consumer Received] Ready to process: {ready_file_path}")
+    test_queue = queue.Queue()
+    
+    watcher_thread = FileWatcher(folder_to_watch, test_queue)
+    watcher_thread.start()
+    
+    try:
+        while True:
+            if not test_queue.empty():
+                meta = test_queue.get()
+                print(f"[Main Thread Test] Popped from queue: {meta.file_name}")
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Test stopped.")
