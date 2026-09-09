@@ -3,8 +3,7 @@ import threading
 import queue
 from inotify_simple import INotify, flags
 
-# Assuming file_processor.py is in the same or src directory
-from file_processor import process_file 
+from src.file_processor import process_file 
 
 class FileWatcher(threading.Thread):
     def __init__(self, watch_dir: str, task_queue: queue.Queue):
