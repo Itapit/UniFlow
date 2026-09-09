@@ -67,9 +67,6 @@ func main() {
 			log.Fatalf("failed opening file %s: %v", filePath, err)
 		}
 
-		if err != nil {
-			log.Fatalf("failed generating file hash: %v", err)
-		}
 
 		readerSize := reader.Size()
 		totalBlocks := uint32((readerSize + constants.BlockSize - 1) / constants.BlockSize)
