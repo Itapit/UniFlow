@@ -6,6 +6,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # Central inbox folder
 WATCH_DIR = str(REPO_ROOT / "data" / "tx_inbox")
 
+TEN_MB_BYTES = 10 * 1024 * 1024
 
 TARGET_IP = "192.168.1.100"
 
