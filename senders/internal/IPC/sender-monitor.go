@@ -1,13 +1,15 @@
 package ipc
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
-	"strings"
+
+	"senders/internal/pb"
+
+	"google.golang.org/protobuf/proto"
 )
 
 
@@ -24,7 +26,7 @@ func StartUDSServer(socketPath string) (net.Listener, error) {
 	return listener, nil
 }
 
-func HandleConn(listener net.Listener, fileChan chan<- string) {
+func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -34,15 +36,26 @@ func HandleConn(listener net.Listener, fileChan chan<- string) {
 
 		go func(c net.Conn) {
 			defer c.Close()
-			scanner := bufio.NewScanner(c)
-			for scanner.Scan() {
-				path := strings.TrimSpace(scanner.Text())
-				if path != "" {
-					fileChan <- path 
+
+			buf := make([]byte, 4096)
+			for {
+				n, err := c.Read(buf)
+				if err != nil {
+					if err != io.EOF {
+						log.Printf("Socket read error: %v", err)
+					}
+					break
 				}
-			}
-			if err := scanner.Err(); err != nil && err != io.EOF {
-				log.Printf("Socket read error: %v", err)
+
+				task := &pb.TaskAssignment{}
+				if err := proto.Unmarshal(buf[:n], task); err != nil {
+					log.Printf("Failed to unmarshal TaskAssignment: %v", err)
+					continue
+				}
+
+				if task.GetFilePath() != "" {
+					taskChan <- task
+				}
 			}
 		}(conn)
 	}

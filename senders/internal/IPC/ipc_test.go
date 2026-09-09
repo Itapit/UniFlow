@@ -1,7 +1,6 @@
 package ipc_test
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -9,8 +8,12 @@ import (
 	"time"
 
 	ipc "senders/internal/IPC"
+	"senders/internal/pb"
+
+	"google.golang.org/protobuf/proto"
 )
-const SocketPath = "/tmp/monitor.sock"
+
+const SocketPath = "/tmp/monitor_test.sock"
 
 func TestUDSServer(t *testing.T) {
 	_ = os.Remove(SocketPath)
@@ -22,8 +25,8 @@ func TestUDSServer(t *testing.T) {
 	}
 	defer listener.Close()
 
-	fileChan := make(chan string)
-	go ipc.HandleConn(listener, fileChan)
+	taskChan := make(chan *pb.TaskAssignment)
+	go ipc.HandleConn(listener, taskChan)
 
 	conn, err := net.Dial("unix", SocketPath)
 	if err != nil {
@@ -31,18 +34,30 @@ func TestUDSServer(t *testing.T) {
 	}
 	defer conn.Close()
 
-	expectedPath := filepath.Clean("/tmp/sample_transfer_file.dat")
-	_, err = fmt.Fprintf(conn, "%s\n", expectedPath)
+	expectedTask := &pb.TaskAssignment{
+		FilePath: filepath.Clean("/tmp/sample_transfer_file.dat"),
+		FileHash: 0xDEADBEEFCAFEBABE,
+	}
+
+	payload, err := proto.Marshal(expectedTask)
 	if err != nil {
-		t.Fatalf("Failed to write to socket: %v", err)
+		t.Fatalf("Failed to marshal protobuf message: %v", err)
+	}
+
+	_, err = conn.Write(payload)
+	if err != nil {
+		t.Fatalf("Failed to write protobuf payload to socket: %v", err)
 	}
 
 	select {
-	case receivedPath := <-fileChan:
-		if receivedPath != expectedPath {
-			t.Errorf("Path mismatch: expected %s, got %s", expectedPath, receivedPath)
+	case receivedTask := <-taskChan:
+		if receivedTask.GetFilePath() != expectedTask.GetFilePath() {
+			t.Errorf("Path mismatch: expected %s, got %s", expectedTask.GetFilePath(), receivedTask.GetFilePath())
+		}
+		if receivedTask.GetFileHash() != expectedTask.GetFileHash() {
+			t.Errorf("Hash mismatch: expected %d, got %d", expectedTask.GetFileHash(), receivedTask.GetFileHash())
 		}
 	case <-time.After(1 * time.Second):
-		t.Fatal("Timeout waiting for path on channel")
+		t.Fatal("Timeout waiting for task on channel")
 	}
 }

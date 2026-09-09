@@ -15,31 +15,39 @@ import (
 	"senders/internal/pb"
 	rd "senders/internal/reader"
 )
+
 const BlocksJump = 8
+
+type EncodedBlock struct {
+	blockIdx uint32
+	shards   [][]byte
+}
+
 func main() {
 
 	targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
 	socketPath := flag.String("socket", "/tmp/monitor.sock", "Path to Unix domain socket for IPC")
 	counterFileName := flag.String("counter-file", "sender_counter.bin", "counter coordination file")
-	
+
+
 	flag.Parse()
 
-	channel:=make(chan string)
-
-	listener,err:=ipc.StartUDSServer(*socketPath)
+	channel := make(chan *pb.TaskAssignment)
+	listener, err := ipc.StartUDSServer(*socketPath)
 	if err != nil {
-    	log.Fatal(err)
+		log.Fatal(err)
 	}
-	go ipc.HandleConn(listener,channel)
+	go ipc.HandleConn(listener, channel)
 
 	defer listener.Close()
 	defer os.Remove(*socketPath)
 
-
-	counterFile,_:=counter.InitCounterFile(constants.CounterFilePath+*counterFileName)
+	counterFile, err := counter.InitCounterFile(constants.CounterFilePath + *counterFileName)
+	if err != nil {
+    	log.Fatalf("failed to initialize counter file: %v", err)
+	}
 
 	defer counterFile.Close()
-
 
 	addr, err := net.ResolveUDPAddr("udp", *targetAddrStr)
 	if err != nil {
@@ -51,13 +59,14 @@ func main() {
 	}
 	defer conn.Close()
 
-	for filePath := range channel {
+	for task := range channel {
+		filePath:=task.FilePath
+		fileHash:=task.FileHash
 		reader, err := rd.OpenFile(filePath)
 		if err != nil {
 			log.Fatalf("failed opening file %s: %v", filePath, err)
 		}
 
-		fileHash, err := rd.GenerateFileHash(filePath)
 		if err != nil {
 			log.Fatalf("failed generating file hash: %v", err)
 		}
@@ -82,6 +91,8 @@ func main() {
 				endBlock = totalBlocks
 			}
 
+			var batchBlocks []EncodedBlock
+
 			for blockIdx := startBlock; blockIdx < endBlock; blockIdx++ {
 				offset := int64(blockIdx) * constants.BlockSize
 
@@ -103,11 +114,24 @@ func main() {
 					break
 				}
 
-				for shardIndex, content := range contents {
+				batchBlocks = append(batchBlocks, EncodedBlock{
+					blockIdx: blockIdx,
+					shards:   contents,
+				})
+			}
+
+			totalShardsPerBlock := constants.DefaultDataShrads + constants.DefaultParityShards
+			for shardIndex := 0; shardIndex < totalShardsPerBlock; shardIndex++ {
+				for _, b := range batchBlocks {
+					if shardIndex >= len(b.shards) {
+						continue
+					}
+
+					content := b.shards[shardIndex]
 					crc := pb.CalculateCRC(content)
 					serializedData, err := pb.FormatPacket(
 						uint64(fileHash),
-						blockIdx, 
+						b.blockIdx,
 						totalBlocks,
 						uint32(shardIndex),
 						uint32(constants.DefaultDataShrads),
