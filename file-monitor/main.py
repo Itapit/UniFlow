@@ -2,7 +2,7 @@ import time
 import queue
 import subprocess
 import sys
-from src.config import TARGET_IP, SENDERS_CONFIG
+from src.config import TARGET_IP, SENDERS_CONFIG ,WATCH_DIR
 
 from src.watcher import FileWatcher
 from src.ipc_manager import IPCManager
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     
     # initialize Shared Resources
     task_queue = queue.Queue()
-    watch_folder = "./data/tx_inbox"
+    watch_folder = WATCH_DIR
     
     # boot Go Executables
     sender_processes = boot_senders()
