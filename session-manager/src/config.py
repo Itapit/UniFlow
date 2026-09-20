@@ -11,3 +11,8 @@ RECEIVER_BINARY = "./bin/receiver.exe"
 RS_HELPER_BINARY = "./bin/rs_helper.exe"
 
 BLOCK_SIZE = 134400
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Central inbox folder
+OUTPUT_DIR = str(REPO_ROOT / "data" / "rx_inbox")
