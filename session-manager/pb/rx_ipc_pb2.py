@@ -22,7 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-import packet_pb2 as packet__pb2
+from . import packet_pb2 as packet__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0crx-ipc.proto\x12\x07uniflow\x1a\x0cpacket.proto\"D\n\x0bSymbolBatch\x12\x13\n\x0breceiver_id\x18\x01 \x01(\r\x12 \n\x07packets\x18\x02 \x03(\x0b\x32\x0f.uniflow.Packetb\x06proto3')
