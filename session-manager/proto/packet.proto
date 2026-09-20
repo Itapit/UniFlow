@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package uniflow;
+option go_package = "./pb";
+
+message Packet {
+  uint64 file_hash     = 1; // Unique file / session ID
+  uint32 block_id      = 2; // Index of the large block (0, 1, 2...)
+  uint32 total_blocks  = 3; // Total blocks in the full file
+  uint32 symbol_id     = 4; // Packet index (0 to K-1 for data, K to N-1 for parity)
+  uint32 k_symbols     = 5; // Number of source data packets (e.g., 200)
+  uint32 n_symbols     = 6; // Total packets transmitted (K data + M parity, e.g., 260)
+  uint64 file_size     = 7; // Full original file size in bytes (for padding truncation)
+  bytes  content       = 8; // Raw binary payload (< 1400 bytes)
+  uint32 packet_crc    = 9; // CRC32 checksum to detect bit flips before FEC decoding
+}
