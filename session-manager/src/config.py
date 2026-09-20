@@ -9,3 +9,5 @@ RS_HELPER_SOCKET_PATH = "/tmp/uniflow_rs_helper.sock"
 
 RECEIVER_BINARY = "./bin/receiver.exe"
 RS_HELPER_BINARY = "./bin/rs_helper.exe"
+
+BLOCK_SIZE = 134400
