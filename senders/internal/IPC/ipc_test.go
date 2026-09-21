@@ -1,6 +1,8 @@
 package ipc_test
 
 import (
+	"encoding/binary"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -16,6 +18,35 @@ import (
 
 const SocketPath = "/tmp/monitor_test.sock"
 
+// Helper to write length-prefixed messages in tests
+func writeFramedTestMsg(w io.Writer, msg proto.Message) error {
+	payload, err := proto.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	header := make([]byte, 4)
+	binary.BigEndian.PutUint32(header, uint32(len(payload)))
+	if _, err := w.Write(header); err != nil {
+		return err
+	}
+	_, err = w.Write(payload)
+	return err
+}
+
+// Helper to read length-prefixed messages in tests
+func readFramedTestMsg(r io.Reader) ([]byte, error) {
+	header := make([]byte, 4)
+	if _, err := io.ReadFull(r, header); err != nil {
+		return nil, err
+	}
+	payloadLen := binary.BigEndian.Uint32(header)
+	payload := make([]byte, payloadLen)
+	if _, err := io.ReadFull(r, payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
 func TestUDSServer_TaskAssignment(t *testing.T) {
 	_ = os.Remove(SocketPath)
 	defer os.Remove(SocketPath)
@@ -27,7 +58,6 @@ func TestUDSServer_TaskAssignment(t *testing.T) {
 	defer listener.Close()
 
 	taskChan := make(chan *pb.TaskAssignment)
-	// פונקציית סטטוס קבועה לצורך בדיקת קבלת משימה
 	getState := func() pb.SenderState {
 		return pb.SenderState_IDLE
 	}
@@ -45,14 +75,8 @@ func TestUDSServer_TaskAssignment(t *testing.T) {
 		FileHash: 0xDEADBEEFCAFEBABE,
 	}
 
-	payload, err := proto.Marshal(expectedTask)
-	if err != nil {
-		t.Fatalf("Failed to marshal protobuf message: %v", err)
-	}
-
-	_, err = conn.Write(payload)
-	if err != nil {
-		t.Fatalf("Failed to write protobuf payload to socket: %v", err)
+	if err := writeFramedTestMsg(conn, expectedTask); err != nil {
+		t.Fatalf("Failed to write framed task: %v", err)
 	}
 
 	select {
@@ -94,27 +118,21 @@ func TestUDSServer_PingHeartbeat(t *testing.T) {
 	}
 	defer conn.Close()
 
-	// 1. שליחת הודעת Ping
+	// 1. Send framed Ping
 	pingMsg := &pb.Ping{}
-	pingBytes, err := proto.Marshal(pingMsg)
-	if err != nil {
-		t.Fatalf("Failed to marshal ping: %v", err)
+	if err := writeFramedTestMsg(conn, pingMsg); err != nil {
+		t.Fatalf("Failed to write framed ping: %v", err)
 	}
 
-	if _, err := conn.Write(pingBytes); err != nil {
-		t.Fatalf("Failed to write ping: %v", err)
-	}
-
-	// 2. קריאת תשובת ה-Heartbeat מה-Socket
-	buf := make([]byte, 1024)
+	// 2. Read framed Heartbeat response
 	_ = conn.SetReadDeadline(time.Now().Add(1 * time.Second))
-	n, err := conn.Read(buf)
+	payload, err := readFramedTestMsg(conn)
 	if err != nil {
-		t.Fatalf("Failed to read heartbeat response: %v", err)
+		t.Fatalf("Failed to read framed heartbeat: %v", err)
 	}
 
 	var hb pb.Heartbeat
-	if err := proto.Unmarshal(buf[:n], &hb); err != nil {
+	if err := proto.Unmarshal(payload, &hb); err != nil {
 		t.Fatalf("Failed to unmarshal heartbeat response: %v", err)
 	}
 
