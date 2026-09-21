@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package uniflow;
+option go_package = "./pb";
+
+// One shard actually received for a block. symbol_id uses the same
+// numbering as Packet.symbol_id in packet.proto (0..k_symbols-1 = data,
+// k_symbols..n_symbols-1 = parity).
+message Shard {
+  uint32 symbol_id = 1;
+  bytes  content    = 2;
+}
+
+// Session Manager -> rs_helper. file_hash/block_id are for rs_helper's own
+// logging/correlation only — no part in the reconstruction math. Send only
+// the shards actually received; anything omitted is treated as lost.
+message ReconstructRequest {
+  uint64 file_hash      = 1;
+  uint32 block_id       = 2;
+  uint32 k_symbols      = 3;
+  uint32 n_symbols      = 4;
+  repeated Shard shards = 5;
+}
+
+// rs_helper -> Session Manager.
+message ReconstructResponse {
+  bool   ok                  = 1;
+  string error               = 2;  // set when ok == false
+  repeated bytes data_shards = 3;  // k_symbols shards, in order, when ok == true
+}

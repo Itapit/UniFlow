@@ -1,1 +1,10 @@
-inotify_simple
+build==1.6.0
+grpcio==1.83.1
+grpcio-tools==1.83.1
+inotify==0.2.12
+inotify-simple==2.0.1
+packaging==26.3
+protobuf==7.36.1
+pyproject_hooks==1.2.0
+setuptools==84.0.0
+typing_extensions==4.16.0
