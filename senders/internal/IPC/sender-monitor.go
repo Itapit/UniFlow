@@ -48,14 +48,12 @@ func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment, getSt
 
 				payload := buf[:n]
 
-				// 1. נבדוק קודם אם מדובר במשימה חדשה
 				task := &pb.TaskAssignment{}
 				if err := proto.Unmarshal(payload, task); err == nil && task.GetFilePath() != "" {
 					taskChan <- task
 					continue
 				}
 
-				// 2. נבדוק אם מדובר ב-Ping
 				ping := &pb.Ping{}
 				if err := proto.Unmarshal(payload, ping); err == nil {
 					currentState := getState()

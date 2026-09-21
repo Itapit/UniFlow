@@ -8,6 +8,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync/atomic"
+
 	ipc "senders/internal/IPC"
 	"senders/internal/constants"
 	"senders/internal/counter"
@@ -24,29 +26,33 @@ type EncodedBlock struct {
 }
 
 func main() {
-
 	targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
 	socketPath := flag.String("socket", "/tmp/monitor.sock", "Path to Unix domain socket for IPC")
 	counterFileName := flag.String("counter-file", "sender_counter.bin", "counter coordination file")
 
-
 	flag.Parse()
+
+	var currentState atomic.Int32
+	currentState.Store(int32(pb.SenderState_IDLE))
 
 	channel := make(chan *pb.TaskAssignment)
 	listener, err := ipc.StartUDSServer(*socketPath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	go ipc.HandleConn(listener, channel)
+
+	// העברת callback לקריאת הסטטוס בכל פעם שמגיע Ping
+	go ipc.HandleConn(listener, channel, func() pb.SenderState {
+		return pb.SenderState(currentState.Load())
+	})
 
 	defer listener.Close()
 	defer os.Remove(*socketPath)
 
 	counterFile, err := counter.InitCounterFile(constants.CounterFilePath + *counterFileName)
 	if err != nil {
-    	log.Fatalf("failed to initialize counter file: %v", err)
+		log.Fatalf("failed to initialize counter file: %v", err)
 	}
-
 	defer counterFile.Close()
 
 	addr, err := net.ResolveUDPAddr("udp", *targetAddrStr)
@@ -60,16 +66,18 @@ func main() {
 	defer conn.Close()
 
 	for task := range channel {
-		filePath:=task.FilePath
-		fileHash:=task.FileHash
+		filePath := task.FilePath
+		fileHash := task.FileHash
+
 		reader, err := rd.OpenFile(filePath)
 		if err != nil {
 			log.Fatalf("failed opening file %s: %v", filePath, err)
 		}
 
-
 		readerSize := reader.Size()
 		totalBlocks := uint32((readerSize + constants.BlockSize - 1) / constants.BlockSize)
+
+		currentState.Store(int32(pb.SenderState_WORKING))
 
 		for {
 			count, err := counter.Count(counterFile)
@@ -79,6 +87,7 @@ func main() {
 			}
 
 			startBlock := uint32(count) * BlocksJump
+			// אם כל הבלוקים כבר נתפסו, לא נשאר תוכן עבור ה-Sender הזה
 			if startBlock >= totalBlocks {
 				break
 			}
@@ -135,8 +144,9 @@ func main() {
 						uint64(readerSize),
 						content,
 					)
+
 					serializedData, err := pb.FormatPacket(
-						fileHash,
+						uint64(fileHash),
 						b.blockIdx,
 						totalBlocks,
 						uint32(shardIndex),
@@ -162,5 +172,7 @@ func main() {
 		}
 
 		reader.Close()
+
+		currentState.Store(int32(pb.SenderState_IDLE))
 	}
 }
