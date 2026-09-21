@@ -1,8 +1,14 @@
 RECEIVERS_CONFIG = {
-    1: {"listen": "127.0.0.1:1400"},
-    2: {"listen": "127.0.0.1:1401"},
-    3: {"listen": "127.0.0.1:1402"},
+    1: {"listen": "0.0.0.0:1400"},
+    2: {"listen": "0.0.0.0:1401"},
+    3: {"listen": "0.0.0.0:1402"},
 }
+# same machine test
+# RECEIVERS_CONFIG = {
+#     1: {"listen": "127.0.0.1:1400"},
+#     2: {"listen": "127.0.0.1:1401"},
+#     3: {"listen": "127.0.0.1:1402"},
+# }
 
 SESSION_SOCKET_PATH = "/tmp/uniflow_session.sock"
 RS_HELPER_SOCKET_PATH = "/tmp/uniflow_rs_helper.sock"
