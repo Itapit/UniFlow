@@ -140,8 +140,8 @@ func main() {
 						b.blockIdx,
 						totalBlocks,
 						uint32(shardIndex),
-						uint32(constants.DefaultDataShrads),
-						uint32(constants.DefaultParityShards),
+						uint32(constants.DefaultDataShrads),                              // kSymbols
+                        uint32(constants.DefaultDataShrads+constants.DefaultParityShards), // nSymbols — 150
 						uint64(readerSize),
 						content,
 					)
@@ -151,8 +151,8 @@ func main() {
 						b.blockIdx,
 						totalBlocks,
 						uint32(shardIndex),
-						uint32(constants.DefaultDataShrads),
-						uint32(constants.DefaultParityShards),
+						uint32(constants.DefaultDataShrads),                              // kSymbols
+                        uint32(constants.DefaultDataShrads+constants.DefaultParityShards), // nSymbols — 150
 						uint64(readerSize),
 						content,
 						crc,

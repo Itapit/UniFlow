@@ -8,13 +8,12 @@ WATCH_DIR = str(REPO_ROOT / "data" / "tx_inbox")
 
 TEN_MB_BYTES = 10 * 1024 * 1024
 
-TARGET_IP = "192.168.1.100"
+TARGET_IP = "127.0.0.1"  # same-machine testing; swap for the RX machine's real IP later
 
-# dictionary mapping sender IDs to their specific execution parameters
 SENDERS_CONFIG = {
-    1: {"port": 5001, "socket_path": "/tmp/uniflow_sender_1.sock"},
-    2: {"port": 5002, "socket_path": "/tmp/uniflow_sender_2.sock"},
-    3: {"port": 5003, "socket_path": "/tmp/uniflow_sender_3.sock"}
+    1: {"port": 1400, "socket_path": "/tmp/uniflow_sender_1.sock"},
+    2: {"port": 1401, "socket_path": "/tmp/uniflow_sender_2.sock"},
+    3: {"port": 1402, "socket_path": "/tmp/uniflow_sender_3.sock"},
 }
 
 sender_states = {

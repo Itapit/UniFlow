@@ -19,19 +19,21 @@ class Orchestrator:
 
     def run(self):
         print("[Orchestrator] Event loop started.")
-        
-        while True:
-            # catch incoming heartbeats (non-blocking)
-            self.ipc_manager.poll(timeout=0.1)
-            
-            # sync active transfers with the latest Sender states
-            self._sync_states()
-            
-            # assign tasks to any senders that are currently IDLE
-            self._dispatch_tasks()
-            
-            time.sleep(0.05)
+        last_ping = 0.0
+        ping_interval = 1.0
 
+        while True:
+            self.ipc_manager.poll(timeout=0.1)
+
+            now = time.time()
+            if now - last_ping >= ping_interval:
+                self.ipc_manager.ping_all()
+                last_ping = now
+
+            self._sync_states()
+            self._dispatch_tasks()
+
+            time.sleep(0.05)
     def _sync_states(self):
         # removes IDLE senders from active tracking, If a file has no active senders, it's finished."
         completed_files = []
