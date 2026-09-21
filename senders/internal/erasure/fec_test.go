@@ -13,10 +13,11 @@ import (
 )
 
 func TestEncodeAndVerifyIntegrity(t *testing.T) {
-	// בלוק בגודל 50,000 בייטים כדי לוודא טיפול תקין ב-Padding
 	originalSize := 50000
 	rawBlock := make([]byte, originalSize)
-	_, _ = rand.Read(rawBlock)
+	if _, err := rand.Read(rawBlock); err != nil {
+		t.Fatalf("Failed to generate random block: %v", err)
+	}
 
 	encodedShards, err := rs.EncodeBlock(rawBlock)
 	if err != nil {
@@ -28,22 +29,37 @@ func TestEncodeAndVerifyIntegrity(t *testing.T) {
 		t.Fatalf("Expected %d shards, got %d", totalShards, len(encodedShards))
 	}
 
-	// בדיקת אימות CRC32 לכל שארד
-	for i, shard := range encodedShards {
-		crc := pb.CalculateCRC(shard)
+	// Mock metadata to match the new CalculateCRC signature
+	fileHash := uint64(0xABCDEF1234567890)
+	blockId := uint32(0)
+	totalBlocks := uint32(1)
+	fileSize := uint64(originalSize)
+
+	// 1. Verify CRC calculation for each shard with metadata
+	for shardIdx, shard := range encodedShards {
+		crc := pb.CalculateCRC(
+			fileHash,
+			blockId,
+			totalBlocks,
+			uint32(shardIdx),
+			uint32(constants.DefaultDataShrads),
+			uint32(constants.DefaultParityShards),
+			fileSize,
+			shard,
+		)
 		if crc == 0 {
-			t.Errorf("Shard %d calculated CRC returned 0", i)
+			t.Errorf("Shard %d calculated CRC returned 0", shardIdx)
 		}
 	}
 
-	// סימולציית איבוד של 50 שארדים ראשונים (מקסימום אפשרי)
+	// 2. Simulate maximum allowable packet loss: erase first N parity shards
 	for i := 0; i < constants.DefaultParityShards; i++ {
 		encodedShards[i] = nil
 	}
 
 	enc, err := reedsolomon.New(constants.DefaultDataShrads, constants.DefaultParityShards)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Failed to initialize decoder: %v", err)
 	}
 
 	err = enc.Reconstruct(encodedShards)
@@ -51,15 +67,22 @@ func TestEncodeAndVerifyIntegrity(t *testing.T) {
 		t.Fatalf("Reconstruct failed: %v", err)
 	}
 
-	// איחוד שארדי ה-Data
+	// 3. Recombine data shards and trim padding
 	var reconstructed bytes.Buffer
 	for i := 0; i < constants.DefaultDataShrads; i++ {
 		reconstructed.Write(encodedShards[i])
 	}
 
-	// חיתוך ה-Padding לפי הגודל המקורי
 	restoredData := reconstructed.Bytes()[:originalSize]
 	if !bytes.Equal(rawBlock, restoredData) {
 		t.Fatal("Data corruption: reconstructed bytes do not match original")
+	}
+}
+
+func TestEncodeBlock_ExceedsMaxSize(t *testing.T) {
+	oversized := make([]byte, constants.MaxBlockSize+1)
+	_, err := rs.EncodeBlock(oversized)
+	if err == nil {
+		t.Errorf("Expected error when encoding block larger than MaxBlockSize, got nil")
 	}
 }

@@ -9,18 +9,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestFormatPacket(t *testing.T) {
+func TestFormatPacketAndCRC(t *testing.T) {
+	fileHash := uint64(9999)
+	blockId := uint32(0)
+	totalBlocks := uint32(10)
+	symbolId := uint32(1)
+	kSymbols := uint32(100)
+	nSymbols := uint32(50)
+	fileSize := uint64(134400)
 	payload := []byte("packet-payload-test")
-	crc := pb.CalculateCRC(payload)
+
+	crc := pb.CalculateCRC(
+		fileHash,
+		blockId,
+		totalBlocks,
+		symbolId,
+		kSymbols,
+		nSymbols,
+		fileSize,
+		payload,
+	)
 
 	serialized, err := pb.FormatPacket(
-		9999,
-		0,
-		10,
-		1,
-		100,
-		50,
-		134400,
+		fileHash,
+		blockId,
+		totalBlocks,
+		symbolId,
+		kSymbols,
+		nSymbols,
+		fileSize,
 		payload,
 		crc,
 	)
@@ -33,11 +50,46 @@ func TestFormatPacket(t *testing.T) {
 		t.Fatalf("Failed to unmarshal packet: %v", err)
 	}
 
-	if parsed.FileHash != 9999 || parsed.BlockId != 0 || parsed.PacketCrc != crc {
-		t.Errorf("Packet metadata mismatch")
+	if parsed.FileHash != fileHash ||
+		parsed.BlockId != blockId ||
+		parsed.TotalBlocks != totalBlocks ||
+		parsed.SymbolId != symbolId ||
+		parsed.KSymbols != kSymbols ||
+		parsed.NSymbols != nSymbols ||
+		parsed.FileSize != fileSize ||
+		parsed.PacketCrc != crc {
+		t.Errorf("Packet metadata or CRC mismatch")
 	}
 
 	if !bytes.Equal(parsed.Content, payload) {
 		t.Errorf("Payload mismatch")
+	}
+
+	recomputedCRC := pb.CalculateCRC(
+		parsed.FileHash,
+		parsed.BlockId,
+		parsed.TotalBlocks,
+		parsed.SymbolId,
+		parsed.KSymbols,
+		parsed.NSymbols,
+		parsed.FileSize,
+		parsed.Content,
+	)
+	if recomputedCRC != parsed.PacketCrc {
+		t.Errorf("Recomputed CRC mismatch: expected %d, got %d", parsed.PacketCrc, recomputedCRC)
+	}
+
+	corruptedCRC := pb.CalculateCRC(
+		parsed.FileHash,
+		parsed.BlockId+1, // סימולציה של שיבוש ב-blockId
+		parsed.TotalBlocks,
+		parsed.SymbolId,
+		parsed.KSymbols,
+		parsed.NSymbols,
+		parsed.FileSize,
+		parsed.Content,
+	)
+	if corruptedCRC == parsed.PacketCrc {
+		t.Errorf("CRC failed to detect metadata alteration")
 	}
 }

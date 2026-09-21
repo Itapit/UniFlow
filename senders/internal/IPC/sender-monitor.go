@@ -12,7 +12,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-
 func StartUDSServer(socketPath string) (net.Listener, error) {
 	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
 		log.Fatalf("Failed to remove old socket file: %v", err)
@@ -26,7 +25,7 @@ func StartUDSServer(socketPath string) (net.Listener, error) {
 	return listener, nil
 }
 
-func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment) {
+func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment, getState func() pb.SenderState) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -47,15 +46,35 @@ func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment) {
 					break
 				}
 
+				payload := buf[:n]
+
+				// 1. נבדוק קודם אם מדובר במשימה חדשה
 				task := &pb.TaskAssignment{}
-				if err := proto.Unmarshal(buf[:n], task); err != nil {
-					log.Printf("Failed to unmarshal TaskAssignment: %v", err)
+				if err := proto.Unmarshal(payload, task); err == nil && task.GetFilePath() != "" {
+					taskChan <- task
 					continue
 				}
 
-				if task.GetFilePath() != "" {
-					taskChan <- task
+				// 2. נבדוק אם מדובר ב-Ping
+				ping := &pb.Ping{}
+				if err := proto.Unmarshal(payload, ping); err == nil {
+					currentState := getState()
+					hb := &pb.Heartbeat{
+						State: currentState,
+					}
+					replyBytes, err := proto.Marshal(hb)
+					if err != nil {
+						log.Printf("Failed to marshal heartbeat: %v", err)
+						continue
+					}
+					if _, err := c.Write(replyBytes); err != nil {
+						log.Printf("Failed to send heartbeat reply: %v", err)
+						break
+					}
+					continue
 				}
+
+				log.Printf("Received unrecognized protobuf payload (%d bytes)", n)
 			}
 		}(conn)
 	}

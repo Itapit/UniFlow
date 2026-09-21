@@ -125,9 +125,18 @@ func main() {
 					}
 
 					content := b.shards[shardIndex]
-					crc := pb.CalculateCRC(content)
+					crc := pb.CalculateCRC(
+						fileHash,
+						b.blockIdx,
+						totalBlocks,
+						uint32(shardIndex),
+						uint32(constants.DefaultDataShrads),
+						uint32(constants.DefaultParityShards),
+						uint64(readerSize),
+						content,
+					)
 					serializedData, err := pb.FormatPacket(
-						uint64(fileHash),
+						fileHash,
 						b.blockIdx,
 						totalBlocks,
 						uint32(shardIndex),
