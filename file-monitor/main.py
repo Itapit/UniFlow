@@ -11,24 +11,18 @@ from src.orchestrator import Orchestrator
 def boot_senders():
     processes = []
     print("[System] Booting Go Senders...")
-    
+
     for sender_id, params in SENDERS_CONFIG.items():
-        # Command mapped to the Go flags we agreed upon
         cmd = [
             "./bin/sender.exe",
-            #sys.executable, "mock_sender.py", 
-            "-ip", TARGET_IP,
-            "-port", str(params["port"]),
-            "-sock", params["socket_path"]
+            "-target", f"{TARGET_IP}:{params['port']}",
+            "-socket", params["socket_path"],
         ]
-        
-        # runs the Go binary in the background
         proc = subprocess.Popen(cmd)
         processes.append(proc)
-        print(f" Booted Sender (Port: {params['port']}, Sock: {params['socket_path']})")
-        
-    # give the OS 1 second to initialize the Unix Domain Socket files
-    time.sleep(1) 
+        print(f" Booted Sender {sender_id} (target={TARGET_IP}:{params['port']}, socket={params['socket_path']})")
+
+    time.sleep(1)
     return processes
 
 if __name__ == "__main__":
