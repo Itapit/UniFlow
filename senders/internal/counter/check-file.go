@@ -5,10 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 )
 
 func InitCounterFile(path string) (*os.File, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create directory for counter file: %w", err)
+	}
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
 	if err == nil {
 		buf := make([]byte, 8)
@@ -35,6 +39,6 @@ func InitCounterFile(path string) (*os.File, error) {
 		}
 		return f, nil
 	}
-	
+
 	return nil, fmt.Errorf("failed to open counter file: %w", err)
 }
