@@ -2,6 +2,9 @@ import socket
 import struct
 
 from pb import rs_helper_pb2
+from src.log_setup import get_logger
+
+log = get_logger("rs_client")
 
 
 class ReconstructionError(Exception):
@@ -20,11 +23,13 @@ class RSClient:
     def connect(self):
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._sock.connect(self.sock_path)
+        log.debug("event=rs_connected socket_path=%s", self.sock_path)
 
     def close(self):
         if self._sock is not None:
             self._sock.close()
             self._sock = None
+            log.debug("event=rs_closed socket_path=%s", self.sock_path)
 
     def reconstruct(self, file_hash: int, block_id: int, k_symbols: int,
                      n_symbols: int, shards: dict) -> list:
@@ -45,6 +50,8 @@ class RSClient:
             raise ReconstructionError(
                 f"rs_helper failed for file_hash={file_hash} block_id={block_id}: {response.error}"
             )
+        log.debug("event=reconstruct_ok file_hash=%s block_id=%s shards_rx=%d data_shards=%d",
+                  file_hash, block_id, len(shards), len(response.data_shards))
         return list(response.data_shards)
 
     def _send_framed(self, message) -> None:

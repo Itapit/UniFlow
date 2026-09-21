@@ -1,8 +1,6 @@
 package forwarder
 
 import (
-	"log"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -76,7 +74,7 @@ func runForwarder(
 	counters *stats.Counters,
 ) {
 	intake := make(chan *pb.Packet, len(feed)+1)
-	forward := NewForwarder(7, batchSize, flushInterval, intake, sender, counters, log.New(os.Stdout, "test ", 0))
+	forward := NewForwarder(7, batchSize, flushInterval, intake, sender, counters, nil)
 	done := make(chan struct{})
 	go func() {
 		forward.Run(nil)
@@ -128,7 +126,7 @@ func TestFlushPartialBatchOnInterval(t *testing.T) {
 	sender := &fakeSender{}
 	counters := &stats.Counters{}
 	intake := make(chan *pb.Packet, 8)
-	forward := NewForwarder(7, 30, 20*time.Millisecond, intake, sender, counters, log.New(os.Stdout, "test ", 0))
+	forward := NewForwarder(7, 30, 20*time.Millisecond, intake, sender, counters, nil)
 	done := make(chan struct{})
 	go func() {
 		forward.Run(nil)
@@ -173,7 +171,7 @@ func TestStopFlushesRemainder(t *testing.T) {
 	counters := &stats.Counters{}
 	intake := make(chan *pb.Packet, 8)
 	stop := make(chan struct{})
-	forward := NewForwarder(7, 30, time.Minute, intake, sender, counters, log.New(os.Stdout, "test ", 0))
+	forward := NewForwarder(7, 30, time.Minute, intake, sender, counters, nil)
 	done := make(chan struct{})
 	go func() {
 		forward.Run(stop)

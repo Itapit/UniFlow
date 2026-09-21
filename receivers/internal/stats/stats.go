@@ -34,20 +34,21 @@ func (counters *Counters) AddForwarded() {
 }
 
 // AddCrcDropped records one packet rejected by checksum verification.
-func (counters *Counters) AddCrcDropped() {
-	counters.crcDropped.Add(1)
+// It returns the new total.
+func (counters *Counters) AddCrcDropped() uint64 {
+	return counters.crcDropped.Add(1)
 }
 
 // AddMalformed records one datagram that failed protobuf unmarshaling
-// or the size guard.
-func (counters *Counters) AddMalformed() {
-	counters.malformed.Add(1)
+// or the size guard. It returns the new total.
+func (counters *Counters) AddMalformed() uint64 {
+	return counters.malformed.Add(1)
 }
 
 // AddIntakeDropped records one validated packet dropped because the
-// intake channel to the forwarder was full.
-func (counters *Counters) AddIntakeDropped() {
-	counters.intakeDropped.Add(1)
+// intake channel to the forwarder was full. It returns the new total.
+func (counters *Counters) AddIntakeDropped() uint64 {
+	return counters.intakeDropped.Add(1)
 }
 
 // AddIpcDropped records one batch lost while the session socket was
@@ -65,12 +66,21 @@ func (counters *Counters) AddBatchSent() {
 func (counters *Counters) Snapshot() string {
 	return fmt.Sprintf(
 		"stats received=%d forwarded=%d batches=%d crc_dropped=%d malformed=%d intake_dropped=%d ipc_dropped=%d",
-		counters.received.Load(),
-		counters.forwarded.Load(),
-		counters.batchesSent.Load(),
-		counters.crcDropped.Load(),
-		counters.malformed.Load(),
-		counters.intakeDropped.Load(),
-		counters.ipcDropped.Load(),
+		counters.Received(),
+		counters.Forwarded(),
+		counters.BatchesSent(),
+		counters.CrcDropped(),
+		counters.Malformed(),
+		counters.IntakeDropped(),
+		counters.IpcDropped(),
 	)
 }
+
+// Read-only getters for structured logging.
+func (counters *Counters) Received() uint64      { return counters.received.Load() }
+func (counters *Counters) Forwarded() uint64     { return counters.forwarded.Load() }
+func (counters *Counters) BatchesSent() uint64   { return counters.batchesSent.Load() }
+func (counters *Counters) CrcDropped() uint64    { return counters.crcDropped.Load() }
+func (counters *Counters) Malformed() uint64     { return counters.malformed.Load() }
+func (counters *Counters) IntakeDropped() uint64 { return counters.intakeDropped.Load() }
+func (counters *Counters) IpcDropped() uint64    { return counters.ipcDropped.Load() }

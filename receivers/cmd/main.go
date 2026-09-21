@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -12,6 +11,7 @@ import (
 
 	"common/integrity"
 	"receivers/internal/forwarder"
+	"receivers/internal/logger"
 	"receivers/internal/sessionClient"
 	"receivers/internal/stats"
 	"receivers/pb"
@@ -41,11 +41,12 @@ const (
 	// example while the session-manager is down) before shutdown forces
 	// the session client closed.
 	shutdownGrace = 10 * time.Second
+	// dropLogEvery throttles per-drop warn lines: only every Nth drop
+	// of each class is logged, the rest are counter-only.
+	dropLogEvery = 1000
 )
 
 func main() {
-	logger := log.New(os.Stdout, "", log.LstdFlags)
-
 	listenAddr := flag.String("listen", ":1400", "UDP address to listen on (IP:Port)")
 	receiverID := flag.Uint("receiver-id", 1, "Receiver identity reported in every batch")
 	sessionSocket := flag.String("session-socket", "/tmp/uniflow_session.sock", "Session-manager Unix socket path")
@@ -55,22 +56,26 @@ func main() {
 	statsInterval := flag.Duration("stats-interval", 30*time.Second, "Interval between stats log lines")
 	flag.Parse()
 
+	baseLog := logger.New("receiver").With("receiver_id", *receiverID)
+
 	counters := &stats.Counters{}
 
 	udpAddr, err := net.ResolveUDPAddr("udp", *listenAddr)
 	if err != nil {
-		logger.Fatalf("receiver: resolve %s: %v", *listenAddr, err)
+		baseLog.Error("resolve failed", "event", "resolve_failed", "listen", *listenAddr, "err", err)
+		os.Exit(1)
 	}
 	udpConn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
-		logger.Fatalf("receiver: listen %s: %v", *listenAddr, err)
+		baseLog.Error("listen failed", "event", "listen_failed", "listen", *listenAddr, "err", err)
+		os.Exit(1)
 	}
 	if err := udpConn.SetReadBuffer(udpReadBuffer); err != nil {
-		logger.Printf("receiver: set read buffer: %v (continuing)", err)
+		baseLog.Warn("set read buffer failed, continuing", "event", "read_buffer_failed", "err", err)
 	}
 
 	intake := make(chan *pb.Packet, *queueDepth)
-	sessionClient := sessionClient.NewClient(*sessionSocket)
+	sessionClient := sessionClient.NewClient(*sessionSocket, baseLog)
 	batchForwarder := forwarder.NewForwarder(
 		uint32(*receiverID),
 		*batchSize,
@@ -78,7 +83,7 @@ func main() {
 		intake,
 		sessionClient,
 		counters,
-		logger,
+		baseLog,
 	)
 
 	var workerGroup sync.WaitGroup
@@ -91,16 +96,22 @@ func main() {
 	}()
 	go func() {
 		defer workerGroup.Done()
-		readLoop(udpConn, intake, counters)
+		readLoop(udpConn, intake, counters, baseLog)
 	}()
-	go statsLoop(counters, logger, *statsInterval)
+	go statsLoop(counters, baseLog, *statsInterval)
 
-	logger.Printf("receiver: id=%d listening on %s, session socket %s", *receiverID, *listenAddr, *sessionSocket)
+	baseLog.Info("receiver listening",
+		"event", "receiver_listening",
+		"listen", *listenAddr,
+		"session_socket", *sessionSocket,
+		"batch_size", *batchSize,
+		"flush_interval_ms", flushInterval.Milliseconds(),
+		"queue_depth", *queueDepth)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
-	logger.Printf("receiver: shutting down")
+	baseLog.Info("shutting down", "event", "shutdown")
 
 	// Stop intake first so nothing new enters the queue, then let the
 	// forwarder drain and flush its remainder.
@@ -115,12 +126,20 @@ func main() {
 	select {
 	case <-shutdownDone:
 	case <-time.After(shutdownGrace):
-		logger.Printf("receiver: flush grace expired, forcing session client closed")
+		baseLog.Warn("flush grace expired, forcing session client closed", "event", "flush_grace_expired")
 		_ = sessionClient.Close()
 		<-shutdownDone
 	}
 	_ = sessionClient.Close()
-	logger.Printf("receiver: stopped. %s", counters.Snapshot())
+	baseLog.Info("receiver stopped",
+		"event", "receiver_stopped",
+		"received", counters.Received(),
+		"forwarded", counters.Forwarded(),
+		"batches", counters.BatchesSent(),
+		"crc_dropped", counters.CrcDropped(),
+		"malformed", counters.Malformed(),
+		"intake_dropped", counters.IntakeDropped(),
+		"ipc_dropped", counters.IpcDropped())
 }
 
 // readLoop reads datagrams, keeps the valid CRC-checked packets, and
@@ -128,7 +147,10 @@ func main() {
 // closed. It never blocks on the intake channel: a full queue means
 // the session-manager path is the bottleneck, so packets drop here
 // with a counter instead of stalling the socket.
-func readLoop(udpConn *net.UDPConn, intake chan<- *pb.Packet, counters *stats.Counters) {
+func readLoop(udpConn *net.UDPConn, intake chan<- *pb.Packet, counters *stats.Counters, log interface {
+	Info(string, ...any)
+	Warn(string, ...any)
+}) {
 	datagram := make([]byte, readDatagramSize)
 	for {
 		packetSize, _, err := udpConn.ReadFromUDP(datagram)
@@ -137,7 +159,14 @@ func readLoop(udpConn *net.UDPConn, intake chan<- *pb.Packet, counters *stats.Co
 		}
 		counters.AddReceived()
 		if packetSize > maxDatagramSize {
-			counters.AddMalformed()
+			n := counters.AddMalformed()
+			if n%dropLogEvery == 1 {
+				log.Warn("datagram dropped",
+					"event", "packet_dropped",
+					"reason", "oversize",
+					"packet_bytes", packetSize,
+					"dropped_total", n)
+			}
 			continue
 		}
 
@@ -149,7 +178,14 @@ func readLoop(udpConn *net.UDPConn, intake chan<- *pb.Packet, counters *stats.Co
 		packet.Reset()
 
 		if err := proto.Unmarshal(rawPacket, packet); err != nil {
-			counters.AddMalformed()
+			n := counters.AddMalformed()
+			if n%dropLogEvery == 1 {
+				log.Warn("datagram dropped",
+					"event", "packet_dropped",
+					"reason", "malformed",
+					"dropped_total", n,
+					"err", err)
+			}
 			forwarder.PacketPool.Put(packet)
 			bufferPool.Put(bufPtr)
 			continue
@@ -165,7 +201,16 @@ func readLoop(udpConn *net.UDPConn, intake chan<- *pb.Packet, counters *stats.Co
 			packet.GetContent(),
 			packet.GetPacketCrc(),
 		) {
-			counters.AddCrcDropped()
+			n := counters.AddCrcDropped()
+			if n%dropLogEvery == 1 {
+				log.Warn("datagram dropped",
+					"event", "packet_dropped",
+					"reason", "crc",
+					"file_hash", packet.GetFileHash(),
+					"block_id", packet.GetBlockId(),
+					"symbol_id", packet.GetSymbolId(),
+					"dropped_total", n)
+			}
 			forwarder.PacketPool.Put(packet)
 			bufferPool.Put(bufPtr)
 			continue
@@ -179,7 +224,15 @@ func readLoop(udpConn *net.UDPConn, intake chan<- *pb.Packet, counters *stats.Co
 		select {
 		case intake <- packet:
 		default:
-			counters.AddIntakeDropped()
+			n := counters.AddIntakeDropped()
+			if n%dropLogEvery == 1 {
+				log.Warn("datagram dropped",
+					"event", "packet_dropped",
+					"reason", "intake_full",
+					"file_hash", packet.GetFileHash(),
+					"block_id", packet.GetBlockId(),
+					"dropped_total", n)
+			}
 			packet.Reset()
 			forwarder.PacketPool.Put(packet)
 		}
@@ -187,10 +240,20 @@ func readLoop(udpConn *net.UDPConn, intake chan<- *pb.Packet, counters *stats.Co
 }
 
 // statsLoop logs the counters snapshot until the process exits.
-func statsLoop(counters *stats.Counters, logger *log.Logger, statsInterval time.Duration) {
+func statsLoop(counters *stats.Counters, log interface {
+	Info(string, ...any)
+}, statsInterval time.Duration) {
 	statsTicker := time.NewTicker(statsInterval)
 	defer statsTicker.Stop()
 	for range statsTicker.C {
-		logger.Printf("receiver: %s", counters.Snapshot())
+		log.Info("stats",
+			"event", "stats",
+			"received", counters.Received(),
+			"forwarded", counters.Forwarded(),
+			"batches", counters.BatchesSent(),
+			"crc_dropped", counters.CrcDropped(),
+			"malformed", counters.Malformed(),
+			"intake_dropped", counters.IntakeDropped(),
+			"ipc_dropped", counters.IpcDropped())
 	}
 }

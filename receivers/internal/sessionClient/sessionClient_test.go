@@ -66,7 +66,7 @@ func TestSendBatchFramed(t *testing.T) {
 	socketPath, stop := startMockServer(t, received)
 	defer stop()
 
-	client := NewClient(socketPath)
+	client := NewClient(socketPath, nil)
 	defer client.Close()
 
 	payload := []byte("batch-payload-bytes")
@@ -88,7 +88,7 @@ func TestSendBatchMultipleOverOneConnection(t *testing.T) {
 	socketPath, stop := startMockServer(t, received)
 	defer stop()
 
-	client := NewClient(socketPath)
+	client := NewClient(socketPath, nil)
 	defer client.Close()
 
 	for index := 0; index < 3; index++ {
@@ -110,7 +110,7 @@ func TestSendBatchMultipleOverOneConnection(t *testing.T) {
 
 func TestSendBatchUnblocksOnClose(t *testing.T) {
 	missingSocket := filepath.Join(t.TempDir(), "nobody-listens.sock")
-	client := NewClient(missingSocket)
+	client := NewClient(missingSocket, nil)
 
 	sendResult := make(chan error, 1)
 	go func() {

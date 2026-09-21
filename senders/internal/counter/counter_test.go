@@ -15,11 +15,14 @@ func TestInitCounterFile_NewFile(t *testing.T) {
 	counterPath := filepath.Join(tmpDir, "test_counter.bin")
 
 	// 1. אתחול קובץ חדש
-	f, err := counter.InitCounterFile(counterPath)
+	f, created, err := counter.InitCounterFile(counterPath)
 	if err != nil {
 		t.Fatalf("InitCounterFile failed: %v", err)
 	}
 	defer f.Close()
+	if !created {
+		t.Errorf("expected created=true for new file")
+	}
 
 	// וידוא שהקובץ בגודל 8 בתים
 	stat, err := f.Stat()
@@ -54,11 +57,14 @@ func TestInitCounterFile_ExistingFile(t *testing.T) {
 	}
 
 	// פתיחת הקובץ הקיים דרך InitCounterFile
-	f, err := counter.InitCounterFile(counterPath)
+	f, created, err := counter.InitCounterFile(counterPath)
 	if err != nil {
 		t.Fatalf("InitCounterFile on existing file failed: %v", err)
 	}
 	defer f.Close()
+	if created {
+		t.Errorf("expected created=false for existing file")
+	}
 
 	// וידוא שהערך הקיים לא נדרס על ידי אפסים
 	readBuf := make([]byte, 8)
@@ -75,7 +81,7 @@ func TestCount_Sequential(t *testing.T) {
 	tmpDir := t.TempDir()
 	counterPath := filepath.Join(tmpDir, "seq_counter.bin")
 
-	f, err := counter.InitCounterFile(counterPath)
+	f, _, err := counter.InitCounterFile(counterPath)
 	if err != nil {
 		t.Fatalf("InitCounterFile failed: %v", err)
 	}
@@ -98,7 +104,7 @@ func TestCount_Concurrent(t *testing.T) {
 	counterPath := filepath.Join(tmpDir, "concurrent_counter.bin")
 
 	// יצירת הקובץ
-	initF, err := counter.InitCounterFile(counterPath)
+	initF, _, err := counter.InitCounterFile(counterPath)
 	if err != nil {
 		t.Fatalf("InitCounterFile failed: %v", err)
 	}

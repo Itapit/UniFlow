@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"net"
 	"strings"
 	"testing"
@@ -12,6 +13,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 )
+
+func testLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 func listenTestSocket(t *testing.T) (*net.UDPConn, *net.UDPAddr) {
 	t.Helper()
@@ -71,7 +74,7 @@ func TestReadLoopAcceptsValidPacket(t *testing.T) {
 	counters := &stats.Counters{}
 	done := make(chan struct{})
 	go func() {
-		readLoop(udpConn, intake, counters)
+		readLoop(udpConn, intake, counters, testLogger())
 		close(done)
 	}()
 
@@ -108,7 +111,7 @@ func TestReadLoopDropsBadPackets(t *testing.T) {
 	counters := &stats.Counters{}
 	done := make(chan struct{})
 	go func() {
-		readLoop(udpConn, intake, counters)
+		readLoop(udpConn, intake, counters, testLogger())
 		close(done)
 	}()
 
@@ -152,7 +155,7 @@ func TestReadLoopDropsMetadataCorruption(t *testing.T) {
 	counters := &stats.Counters{}
 	done := make(chan struct{})
 	go func() {
-		readLoop(udpConn, intake, counters)
+		readLoop(udpConn, intake, counters, testLogger())
 		close(done)
 	}()
 
@@ -196,12 +199,13 @@ func TestReadLoopDropsMetadataCorruption(t *testing.T) {
 	}
 }
 
-func TestReadLoopDropsWhenIntakeFull(t *testing.T) {	udpConn, listenAddr := listenTestSocket(t)
+func TestReadLoopDropsWhenIntakeFull(t *testing.T) {
+	udpConn, listenAddr := listenTestSocket(t)
 	intake := make(chan *pb.Packet) // nobody drains: always full
 	counters := &stats.Counters{}
 	done := make(chan struct{})
 	go func() {
-		readLoop(udpConn, intake, counters)
+		readLoop(udpConn, intake, counters, testLogger())
 		close(done)
 	}()
 

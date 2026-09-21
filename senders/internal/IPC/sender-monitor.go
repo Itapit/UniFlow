@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 
@@ -13,24 +13,27 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func StartUDSServer(socketPath string) (net.Listener, error) {
+func StartUDSServer(socketPath string, logger *slog.Logger) (net.Listener, error) {
 	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
-		log.Fatalf("Failed to remove old socket file: %v", err)
+		return nil, fmt.Errorf("failed to remove old socket file %s: %w", socketPath, err)
+	} else if err == nil {
+		logger.Warn("stale socket removed", "socket_path", socketPath, "event", "socket_removed")
 	}
 
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start UDS server: %w", err)
+		return nil, fmt.Errorf("failed to start UDS server on %s: %w", socketPath, err)
 	}
+	logger.Info("socket listening", "event", "socket_listen", "socket_path", socketPath)
 
 	return listener, nil
 }
 
-func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment, getState func() pb.SenderState) {
+func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment, getState func() pb.SenderState, logger *slog.Logger) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("Accept error: %v", err)
+			logger.Warn("accept failed", "event", "accept_error", "err", err)
 			continue
 		}
 
@@ -41,13 +44,18 @@ func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment, getSt
 				payload, err := readFramed(c)
 				if err != nil {
 					if err != io.EOF {
-						log.Printf("Socket read error: %v", err)
+						logger.Warn("socket read failed", "event", "socket_read_error", "err", err)
 					}
 					return
 				}
 
 				task := &pb.TaskAssignment{}
 				if err := proto.Unmarshal(payload, task); err == nil && task.GetFilePath() != "" {
+					logger.Info("task received",
+						"event", "task_received",
+						"file_path", task.GetFilePath(),
+						"file_hash", task.GetFileHash(),
+						"payload_bytes", len(payload))
 					taskChan <- task
 					continue
 				}
@@ -56,13 +64,15 @@ func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment, getSt
 				if err := proto.Unmarshal(payload, ping); err == nil {
 					hb := &pb.Heartbeat{State: getState()}
 					if err := writeFramed(c, hb); err != nil {
-						log.Printf("Failed to send heartbeat reply: %v", err)
+						logger.Warn("heartbeat reply failed", "event", "heartbeat_error", "err", err)
 						return
 					}
 					continue
 				}
 
-				log.Printf("Received unrecognized protobuf payload (%d bytes)", len(payload))
+				logger.Warn("unrecognized payload",
+					"event", "unrecognized_payload",
+					"payload_bytes", len(payload))
 			}
 		}(conn)
 	}

@@ -5,9 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"io"
-	"log"
+	"log/slog"
 	"net"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -27,7 +26,7 @@ func TestServeReconstructsOverRealSocket(t *testing.T) {
 	}
 	t.Cleanup(func() { listener.Close() })
 
-	go serve(listener, log.New(os.Stdout, "test ", 0))
+	go serve(listener, slog.New(slog.DiscardHandler))
 
 	conn, err := net.Dial("unix", sockPath)
 	if err != nil {

@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-func InitCounterFile(path string) (*os.File, error) {
+func InitCounterFile(path string) (*os.File, bool, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create directory for counter file: %w", err)
+		return nil, false, fmt.Errorf("failed to create directory for counter file: %w", err)
 	}
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
 	if err == nil {
@@ -19,26 +19,26 @@ func InitCounterFile(path string) (*os.File, error) {
 		binary.LittleEndian.PutUint64(buf, 0)
 		if _, err := file.Write(buf); err != nil {
 			file.Close()
-			return nil, err
+			return nil, false, err
 		}
-		return file, nil
+		return file, true, nil
 	}
 
 	if errors.Is(err, os.ErrExist) {
 		f, err := os.OpenFile(path, os.O_RDWR, 0666)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		for i := 0; i < 50; i++ {
 			stat, err := f.Stat()
 			if err == nil && stat.Size() >= 8 {
-				return f, nil
+				return f, false, nil
 			}
 			time.Sleep(2 * time.Millisecond)
 		}
-		return f, nil
+		return f, false, nil
 	}
 
-	return nil, fmt.Errorf("failed to open counter file: %w", err)
+	return nil, false, fmt.Errorf("failed to open counter file: %w", err)
 }

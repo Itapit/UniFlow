@@ -3,15 +3,18 @@ import threading
 import queue
 from inotify_simple import INotify, flags
 
-from src.file_processor import process_file 
+from src.file_processor import process_file
+from src.log_setup import get_logger
+
+log = get_logger("watcher")
 
 class FileWatcher(threading.Thread):
     def __init__(self, watch_dir: str, task_queue: queue.Queue):
         # daemon=True ensures this thread closes when main.py exits
-        super().__init__(daemon=True) 
+        super().__init__(daemon=True)
         self.watch_dir = watch_dir
         self.task_queue = task_queue
-        
+
         if not os.path.isdir(self.watch_dir):
             os.makedirs(self.watch_dir, exist_ok=True)
 
@@ -22,7 +25,7 @@ class FileWatcher(threading.Thread):
         watch_flags = flags.CLOSE_WRITE | flags.MOVED_TO
         watch_descriptor = inotify.add_watch(self.watch_dir, watch_flags)
 
-        print(f"[Watcher] Listening for new/modified files in: {self.watch_dir}")
+        log.info("event=listening watch_dir=%s", self.watch_dir)
 
         try:
             while True:
@@ -36,44 +39,45 @@ class FileWatcher(threading.Thread):
 
                     if os.path.isfile(full_path):
                         file_size = os.path.getsize(full_path)
-                        
+
                         # filter out 0-byte creation artifacts
                         if file_size == 0:
                             continue
-                        
-                        print(f"[Watcher Detected] Ready: {full_path} ({file_size} bytes)")
-                        
+
+                        log.info("event=detected path=%s size=%d", full_path, file_size)
+
                         # Process hash and size
                         try:
                             metadata = process_file(full_path)
                             # Push to the thread-safe queue for the orchestrator
                             self.task_queue.put(metadata)
-                            print(f"[Watcher] Queued: {event.name}")
+                            log.info("event=queued name=%s file_hash=%d size=%d",
+                                     metadata.file_name, metadata.file_hash, metadata.file_size)
                         except Exception as e:
-                            print(f"[Watcher Error] Failed to process {event.name}: {e}")
-                            
+                            log.exception("event=hash_failed name=%s err=%s", event.name, e)
+
         except Exception as e:
             # Catch general thread exceptions since KeyboardInterrupt goes to the main thread
-            print(f"\n[Watcher] Thread stopping: {e}")
+            log.exception("event=thread_stopping err=%s", e)
         finally:
             inotify.rm_watch(watch_descriptor)
             inotify.close()
 
 if __name__ == "__main__":
     import time
-    
+
     # Dummy test block for the new class
     folder_to_watch = "./data/tx_inbox"
     test_queue = queue.Queue()
-    
+
     watcher_thread = FileWatcher(folder_to_watch, test_queue)
     watcher_thread.start()
-    
+
     try:
         while True:
             if not test_queue.empty():
                 meta = test_queue.get()
-                print(f"[Main Thread Test] Popped from queue: {meta.file_name}")
+                log.info("event=test_pop name=%s", meta.file_name)
             time.sleep(1)
     except KeyboardInterrupt:
-        print("Test stopped.")
+        log.info("event=test_stopped")

@@ -3,6 +3,7 @@ package ipc_test
 import (
 	"encoding/binary"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,6 +16,10 @@ import (
 
 	"google.golang.org/protobuf/proto"
 )
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}
 
 const SocketPath = "/tmp/monitor_test.sock"
 
@@ -51,7 +56,7 @@ func TestUDSServer_TaskAssignment(t *testing.T) {
 	_ = os.Remove(SocketPath)
 	defer os.Remove(SocketPath)
 
-	listener, err := ipc.StartUDSServer(SocketPath)
+	listener, err := ipc.StartUDSServer(SocketPath, testLogger())
 	if err != nil {
 		t.Fatalf("Failed to start UDS server: %v", err)
 	}
@@ -62,7 +67,7 @@ func TestUDSServer_TaskAssignment(t *testing.T) {
 		return pb.SenderState_IDLE
 	}
 
-	go ipc.HandleConn(listener, taskChan, getState)
+	go ipc.HandleConn(listener, taskChan, getState, testLogger())
 
 	conn, err := net.Dial("unix", SocketPath)
 	if err != nil {
@@ -96,7 +101,7 @@ func TestUDSServer_PingHeartbeat(t *testing.T) {
 	_ = os.Remove(SocketPath)
 	defer os.Remove(SocketPath)
 
-	listener, err := ipc.StartUDSServer(SocketPath)
+	listener, err := ipc.StartUDSServer(SocketPath, testLogger())
 	if err != nil {
 		t.Fatalf("Failed to start UDS server: %v", err)
 	}
@@ -110,7 +115,7 @@ func TestUDSServer_PingHeartbeat(t *testing.T) {
 		return pb.SenderState(state.Load())
 	}
 
-	go ipc.HandleConn(listener, taskChan, getState)
+	go ipc.HandleConn(listener, taskChan, getState, testLogger())
 
 	conn, err := net.Dial("unix", SocketPath)
 	if err != nil {

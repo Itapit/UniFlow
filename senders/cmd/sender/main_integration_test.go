@@ -58,7 +58,7 @@ func TestEndToEndSenderWorkflow(t *testing.T) {
 	go func() {
 		// אתחול קובץ מונה ייעודי לפי ה-fileHash
 		counterPath := filepath.Join(tmpDir, fmt.Sprintf("counter_%d.bin", task.FileHash))
-		counterFile, err := counter.InitCounterFile(counterPath)
+		counterFile, _, err := counter.InitCounterFile(counterPath)
 		if err != nil {
 			errChan <- fmt.Errorf("init counter file failed: %w", err)
 			return

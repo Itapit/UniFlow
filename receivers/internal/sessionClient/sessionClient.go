@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ type Client struct {
 	sessionSocketPath string
 	connection        net.Conn
 	currentBackoff    time.Duration
+	logger            *slog.Logger
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -37,12 +39,16 @@ type Client struct {
 }
 
 // NewClient builds a disconnected client for the given socket path.
-// The first SendBatch dials lazily.
-func NewClient(sessionSocketPath string) *Client {
+// The first SendBatch dials lazily. A nil logger maps to a discard logger.
+func NewClient(sessionSocketPath string, logger *slog.Logger) *Client {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		sessionSocketPath: sessionSocketPath,
 		currentBackoff:    initialBackoff,
+		logger:            logger.With("session_socket", sessionSocketPath),
 		ctx:               ctx,
 		cancel:            cancel,
 	}
@@ -74,6 +80,10 @@ func (client *Client) SendBatch(payload []byte) error {
 	// Vector write avoids allocating a single combined frame buffer
 	buffers := net.Buffers{header[:], payload}
 	if _, err := buffers.WriteTo(client.connection); err != nil {
+		client.logger.Warn("session write failed, dropping batch",
+			"event", "session_write_failed",
+			"payload_bytes", len(payload),
+			"err", err)
 		client.closeConnectionLocked()
 		return fmt.Errorf("sessionclient: write to %s: %w", client.sessionSocketPath, err)
 	}
@@ -81,6 +91,7 @@ func (client *Client) SendBatch(payload []byte) error {
 }
 func (client *Client) reconnectLocked() error {
 	var dialer net.Dialer
+	attempt := 0
 	for {
 		select {
 		case <-client.ctx.Done():
@@ -92,8 +103,22 @@ func (client *Client) reconnectLocked() error {
 		if err == nil {
 			client.connection = conn
 			client.currentBackoff = initialBackoff
+			if attempt > 0 {
+				client.logger.Info("session reconnected",
+					"event", "session_reconnected",
+					"attempts", attempt+1)
+			} else {
+				client.logger.Info("session connected", "event", "session_connected")
+			}
 			return nil
 		}
+
+		attempt++
+		client.logger.Warn("session reconnect pending",
+			"event", "session_reconnect_attempt",
+			"attempt", attempt,
+			"backoff_ms", client.currentBackoff.Milliseconds(),
+			"err", err)
 
 		timer := time.NewTimer(client.currentBackoff)
 		select {
@@ -115,7 +140,6 @@ func (client *Client) Close() error {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
-	client.cancel()
 	return client.closeConnectionLocked()
 }
 
@@ -125,5 +149,6 @@ func (client *Client) closeConnectionLocked() error {
 	}
 	err := client.connection.Close()
 	client.connection = nil
+	client.logger.Info("session connection closed", "event", "session_closed")
 	return err
 }

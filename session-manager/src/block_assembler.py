@@ -1,5 +1,10 @@
+import time
+
 from src.rs_client import RSClient, ReconstructionError
 from src.config import RS_HELPER_SOCKET_PATH, BLOCK_SIZE
+from src.log_setup import get_logger
+
+log = get_logger("block_assembler")
 
 
 class BlockAssembler:
@@ -18,18 +23,33 @@ class BlockAssembler:
 
     def handle_block_ready(self, file_hash, block_id, k_symbols, n_symbols,
                             file_size, total_blocks, shards, contributing_receivers):
+        start = time.monotonic()
         client = self._client_factory(self._rs_helper_socket_path)
-        client.connect()
+        try:
+            client.connect()
+        except OSError as e:
+            log.error("event=rs_connect_failed file_hash=%s block_id=%s socket_path=%s err=%s",
+                      file_hash, block_id, self._rs_helper_socket_path, e)
+            return
         try:
             data_shards = client.reconstruct(
                 file_hash=file_hash, block_id=block_id,
                 k_symbols=k_symbols, n_symbols=n_symbols, shards=shards,
             )
         except ReconstructionError as e:
-            print(f"[BlockAssembler] failed file_hash={file_hash} block_id={block_id}: {e}")
+            log.error("event=reconstruct_failed file_hash=%s block_id=%s shards_rx=%d k=%d duration_ms=%d err=%s",
+                      file_hash, block_id, len(shards), k_symbols,
+                      int((time.monotonic() - start) * 1000), e)
+            return
+        except (ConnectionError, OSError) as e:
+            log.error("event=rs_io_failed file_hash=%s block_id=%s err=%s",
+                      file_hash, block_id, e)
             return
         finally:
-            client.close()
+            try:
+                client.close()
+            except Exception:
+                pass
 
         block_bytes = b"".join(data_shards)
 
@@ -38,6 +58,11 @@ class BlockAssembler:
         if block_id == total_blocks - 1:
             real_bytes = file_size - (total_blocks - 1) * BLOCK_SIZE
             block_bytes = block_bytes[:real_bytes]
+
+        duration_ms = int((time.monotonic() - start) * 1000)
+        log.info("event=block_ok file_hash=%s block_id=%s bytes=%d shards_rx=%d duration_ms=%d receivers=%s",
+                 file_hash, block_id, len(block_bytes), len(shards),
+                 duration_ms, sorted(contributing_receivers))
 
         self._on_block_assembled(
             file_hash=file_hash, block_id=block_id, total_blocks=total_blocks,

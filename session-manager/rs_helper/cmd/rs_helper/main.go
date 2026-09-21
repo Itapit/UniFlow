@@ -4,13 +4,15 @@ import (
 	"encoding/binary"
 	"flag"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"os"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	"rs_helper/internal/decode"
+	"rs_helper/internal/logger"
 	"rs_helper/pb"
 )
 
@@ -18,25 +20,35 @@ func main() {
 	sockPath := flag.String("sock", "/tmp/uniflow_rs_helper.sock", "Unix socket path to listen on")
 	flag.Parse()
 
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+	log := logger.New("rs_helper").With("socket_path", *sockPath)
 
 	if err := os.Remove(*sockPath); err != nil && !os.IsNotExist(err) {
-		logger.Fatalf("rs_helper: failed to remove old socket file: %v", err)
+		log.Error("stale socket removal failed", "event", "socket_remove_failed", "err", err)
+		os.Exit(1)
+	} else if err == nil {
+		log.Warn("stale socket removed", "event", "socket_removed")
 	}
 
 	listener, err := net.Listen("unix", *sockPath)
 	if err != nil {
-		logger.Fatalf("rs_helper: failed to listen on %s: %v", *sockPath, err)
+		log.Error("listen failed", "event", "listen_failed", "err", err)
+		os.Exit(1)
 	}
 	defer listener.Close()
-	defer os.Remove(*sockPath)
+	defer func() {
+		if err := os.Remove(*sockPath); err != nil && !os.IsNotExist(err) {
+			log.Warn("socket cleanup failed", "event", "socket_remove_failed", "err", err)
+		} else {
+			log.Info("socket removed", "event", "socket_removed")
+		}
+	}()
 
-	logger.Printf("rs_helper: listening on %s", *sockPath)
-	serve(listener, logger)
+	log.Info("rs_helper listening", "event", "listening")
+	serve(listener, log)
 }
 
 // serve accepts connections until the listener is closed.
-func serve(listener net.Listener, logger *log.Logger) {
+func serve(listener net.Listener, logger *slog.Logger) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -51,27 +63,46 @@ func serve(listener net.Listener, logger *log.Logger) {
 // in the order they arrive on this connection — there's no request ID
 // to multiplex on, so the Python side must wait for each response
 // before sending the next request on the same connection.
-func handleConnection(conn net.Conn, logger *log.Logger) {
+func handleConnection(conn net.Conn, logger *slog.Logger) {
 	defer conn.Close()
-	logger.Printf("rs_helper: session manager connected")
+	logger.Debug("session manager connected", "event", "peer_connected")
 
 	for {
 		req, err := readRequest(conn)
 		if err != nil {
 			if err != io.EOF {
-				logger.Printf("rs_helper: read error: %v", err)
+				logger.Warn("read failed", "event", "read_error", "err", err)
 			}
 			return
 		}
 
+		start := time.Now()
 		resp := decode.FromRequest(req)
+		durationMs := time.Since(start).Milliseconds()
 		if !resp.GetOk() {
-			logger.Printf("rs_helper: reconstruction failed for file_hash=%d block_id=%d: %s",
-				req.GetFileHash(), req.GetBlockId(), resp.GetError())
+			logger.Error("reconstruction failed",
+				"event", "reconstruction_failed",
+				"file_hash", req.GetFileHash(),
+				"block_id", req.GetBlockId(),
+				"k_symbols", req.GetKSymbols(),
+				"n_symbols", req.GetNSymbols(),
+				"shards_rx", len(req.GetShards()),
+				"duration_ms", durationMs,
+				"err", resp.GetError())
+		} else {
+			logger.Info("reconstruction ok",
+				"event", "reconstruction_ok",
+				"file_hash", req.GetFileHash(),
+				"block_id", req.GetBlockId(),
+				"k_symbols", req.GetKSymbols(),
+				"n_symbols", req.GetNSymbols(),
+				"shards_rx", len(req.GetShards()),
+				"data_shards", len(resp.GetDataShards()),
+				"duration_ms", durationMs)
 		}
 
 		if err := writeResponse(conn, resp); err != nil {
-			logger.Printf("rs_helper: write error: %v", err)
+			logger.Warn("write failed", "event", "write_error", "err", err)
 			return
 		}
 	}

@@ -6,7 +6,7 @@
 package forwarder
 
 import (
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -36,11 +36,12 @@ type Forwarder struct {
 	intake        <-chan *pb.Packet
 	sender        BatchSender
 	counters      *stats.Counters
-	logger        *log.Logger
+	logger        *slog.Logger
 }
 
 // NewForwarder builds a forwarder that drains intake and delivers
 // batches of up to batchSize packets through sender.
+// A nil logger maps to a discard logger.
 func NewForwarder(
 	receiverID uint32,
 	batchSize int,
@@ -48,8 +49,11 @@ func NewForwarder(
 	intake <-chan *pb.Packet,
 	sender BatchSender,
 	counters *stats.Counters,
-	logger *log.Logger,
+	logger *slog.Logger,
 ) *Forwarder {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	return &Forwarder{
 		receiverID:    receiverID,
 		batchSize:     batchSize,
@@ -57,7 +61,7 @@ func NewForwarder(
 		intake:        intake,
 		sender:        sender,
 		counters:      counters,
-		logger:        logger,
+		logger:        logger.With("receiver_id", receiverID),
 	}
 }
 
@@ -128,19 +132,30 @@ func (forwarder *Forwarder) flushBatch(batch []*pb.Packet) {
 	payload, err := proto.Marshal(outgoing)
 	if err != nil {
 		forwarder.counters.AddIpcDropped()
-		forwarder.logger.Printf("forwarder: marshal batch of %d packets: %v", len(batch), err)
+		forwarder.logger.Error("marshal batch failed",
+			"event", "batch_marshal_failed",
+			"batch_size", len(batch),
+			"err", err)
 		return
 	}
 	if err := forwarder.sender.SendBatch(payload); err != nil {
 		forwarder.counters.AddIpcDropped()
-		forwarder.logger.Printf("forwarder: send batch of %d packets: %v", len(batch), err)
+		forwarder.logger.Warn("send batch failed, counted as ipc-dropped",
+			"event", "batch_send_failed",
+			"batch_size", len(batch),
+			"payload_bytes", len(payload),
+			"err", err)
 		return
 	}
 	for range batch {
 		forwarder.counters.AddForwarded()
 	}
 	forwarder.counters.AddBatchSent()
-	forwarder.logger.Printf("forwarder: batch sent size=%d files=%v", len(batch), distinctFileHashes(batch))
+	forwarder.logger.Info("batch sent",
+		"event", "batch_sent",
+		"batch_size", len(batch),
+		"payload_bytes", len(payload),
+		"files", distinctFileHashes(batch))
 }
 
 // distinctFileHashes lists the file hashes present in a batch for the

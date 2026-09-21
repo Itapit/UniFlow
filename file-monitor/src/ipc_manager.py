@@ -1,8 +1,11 @@
 import selectors
 import socket
 import struct
-from pb import tx_ipc_pb2 
+from pb import tx_ipc_pb2
 from src.config import SENDERS_CONFIG
+from src.log_setup import get_logger
+
+log = get_logger("ipc")
 
 class IPCManager:
     def __init__(self, sender_states):
@@ -15,24 +18,26 @@ class IPCManager:
         # establishes connections to the Go Senders and registers them for reading
         for sender_id, params in SENDERS_CONFIG.items():
             sock_path = params["socket_path"]
-            
+
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             sock.setblocking(False) # prevents the socket's functions from freezing the script
-            
+
             try:
                 sock.connect(sock_path)
                 self.sockets[sock] = sender_id
-                
+
                 # register this socket with the OS to tell us when data is ready to read
                 self.selector.register(sock, selectors.EVENT_READ, self._handle_read)
-                print(f"[IPC] Connected to Sender {sender_id} at {sock_path}")
-            except (FileNotFoundError, ConnectionRefusedError):
-                print(f"[IPC Error] Could not connect to Sender {sender_id}.")
+                log.info("event=sender_connected sender_id=%s socket_path=%s", sender_id, sock_path)
+            except (FileNotFoundError, ConnectionRefusedError) as e:
+                log.warning("event=sender_connect_failed sender_id=%s socket_path=%s err=%s",
+                            sender_id, sock_path, e)
 
     def send_task(self, sender_id: int, file_path: str, file_hash: int):
         # frames and dispatches a TaskAssignment to a specific Sender.
         msg = tx_ipc_pb2.TaskAssignment(file_path=file_path, file_hash=file_hash)
         self._send_framed(sender_id, msg)
+        log.info("event=task_sent sender_id=%s file_hash=%d file_path=%s", sender_id, file_hash, file_path)
 
     def ping_all(self):
         # sends an empty Ping message to all connected Senders.
@@ -48,37 +53,43 @@ class IPCManager:
            if sid == sender_id:
              target_sock = s
              break
-            
+
         payload = pb_msg.SerializeToString()
         header = struct.pack(">I", len(payload))
-        
+
         try:
             target_sock.sendall(header + payload)
         except BlockingIOError:
-            pass # Socket buffer full, handle retry logic later
+            log.warning("event=send_buffer_full sender_id=%s bytes=%d", sender_id, len(payload))
 
     def _handle_read(self, sock):
         # triggered automatically by the selector when a Sender sends data. in the selctor.register function
         sender_id = self.sockets[sock]
-        
+
         try:
             # read the 4-byte length header
             header = sock.recv(4)
             if not header:
                 return # connection closed
-                
+
             payload_len = struct.unpack(">I", header)[0]
-            
+
             # read the exact length of the Protobuf payload
             payload = sock.recv(payload_len)
-            
+
             # parse the Heartbeat and update the global state dictionary
             heartbeat = tx_ipc_pb2.Heartbeat()
             heartbeat.ParseFromString(payload)
-            
+
             # State 0 is IDLE, State 1 is WORKING
-            self.sender_states[sender_id] = "WORKING" if heartbeat.state == 1 else "IDLE" #TODO: make an enum
-            
+            new_state = "WORKING" if heartbeat.state == 1 else "IDLE" #TODO: make an enum
+            old_state = self.sender_states.get(sender_id)
+            self.sender_states[sender_id] = new_state
+            if old_state != new_state:
+                log.info("event=sender_state sender_id=%s old=%s new=%s", sender_id, old_state, new_state)
+            else:
+                log.debug("event=heartbeat sender_id=%s state=%s", sender_id, new_state)
+
         except (BlockingIOError, ConnectionResetError):
             pass # handle broken pipes
 

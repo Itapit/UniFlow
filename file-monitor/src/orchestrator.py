@@ -1,24 +1,28 @@
+import os
 import time
 import queue
 from src.config import SENDERS_CONFIG
-from src.config import TEN_MB_BYTES 
+from src.config import TEN_MB_BYTES
+from src.log_setup import get_logger
+
+log = get_logger("orchestrator")
 
 class Orchestrator:
     def __init__(self, task_queue: queue.Queue, ipc_manager, sender_states: dict):
         self.task_queue = task_queue
         self.ipc_manager = ipc_manager
         self.sender_states = sender_states
-        
+
         # tracks active transfers for each file path there is a list contains all the working senders
         self.active_transfers = {}
-        
+
         # holds a large file if we need newly IDLE senders to join it later
-        self.current_large_file = None 
-        
+        self.current_large_file = None
+
         self.finished_large_file_senders = set() # Track who is done with the current large file
 
     def run(self):
-        print("[Orchestrator] Event loop started.")
+        log.info("event=loop_started")
         last_ping = 0.0
         ping_interval = 1.0
 
@@ -37,7 +41,7 @@ class Orchestrator:
     def _sync_states(self):
         # removes IDLE senders from active tracking, If a file has no active senders, it's finished."
         completed_files = []
-        
+
         for file_path, assigned_sockets in self.active_transfers.items():
             active_sockets = []
             for sock in assigned_sockets:
@@ -47,30 +51,66 @@ class Orchestrator:
                     # if they are IDLE and this is the large file, they are permanently done with it
                     if self.current_large_file and file_path == self.current_large_file.file_path:
                         self.finished_large_file_senders.add(sock)
-            
+
             self.active_transfers[file_path] = active_sockets
-            
+
             if not active_sockets:
                 completed_files.append(file_path)
-                
+
         for file_path in completed_files:
             del self.active_transfers[file_path]
-            print(f"[Orchestrator] Completed transmission for: {file_path}")
-            
+            log.info("event=file_complete path=%s", file_path)
+            try:
+                self._cleanup_counter(file_path)
+            except Exception as e:
+                log.warning("event=counter_cleanup_failed path=%s err=%s", file_path, e)
+
             # if this was our tracked large file, clear it so we can move to the next one
             if self.current_large_file and self.current_large_file.file_path == file_path:
                 self.current_large_file = None
                 self.finished_large_file_senders.clear()
+
+    @staticmethod
+    def _cleanup_counter(file_path: str) -> None:
+        """Remove leftover shared-counter files for a finished transfer.
+
+        Counter files are named counter_<file_hash>.bin and live under
+        shared/counter/. The senders only Close() them, so without this
+        the directory accumulates one stale .bin per transfer. We hash here
+        rather than trust in-memory metadata so a restart still cleans up.
+        """
+        from pathlib import Path
+        from src.file_processor import compute_file_hash
+
+        counter_dir = Path(__file__).resolve().parent.parent.parent / "shared" / "counter"
+        try:
+            file_hash = compute_file_hash(file_path)
+        except OSError:
+            # Source file already moved/deleted — fall back to sweeping
+            # only files that look like orphaned counters is unsafe, so skip.
+            log.debug("event=counter_cleanup_skipped path=%s reason=hash_failed", file_path)
+            return
+        counter_path = counter_dir / f"counter_{file_hash}.bin"
+        try:
+            os.remove(counter_path)
+            log.info("event=counter_deleted counter_path=%s file_hash=%d", str(counter_path), file_hash)
+        except FileNotFoundError:
+            log.debug("event=counter_already_gone counter_path=%s file_hash=%d",
+                      str(counter_path), file_hash)
+
     def _dispatch_tasks(self):
         # greedily assigns files to IDLE senders.
         idle_sockets = [
-            sock for sock, state in self.sender_states.items() 
+            sock for sock, state in self.sender_states.items()
             if state == "IDLE"
         ]
-        
+
         if not idle_sockets:
             return # No available workers, back to polling
-            
+
+        log.debug("event=dispatch_poll idle=%d queued=%d active_files=%d",
+                  len(idle_sockets), self.task_queue.qsize(), len(self.active_transfers))
+
         # strategy A: join an in-progress large file
         if self.current_large_file:
             for sock in idle_sockets:
@@ -82,7 +122,7 @@ class Orchestrator:
         # strategy B: pull a new file from the queue
         if not self.task_queue.empty():
             metadata = self.task_queue.get()
-            
+
             if metadata.file_size < TEN_MB_BYTES:
                 # Small file: Assign to the first available IDLE sender
                 target_sock = idle_sockets[0]
@@ -95,14 +135,16 @@ class Orchestrator:
 
     def _assign_task(self, sock_path: str, metadata):
         # triggers the IPC manager to send the Protobuf message and updates local state.
-        print(f"[Orchestrator] Assigning {metadata.file_name} to Sender at {sock_path}")
-        
+        strategy = "large_join" if (self.current_large_file and metadata.file_path == self.current_large_file.file_path) else "single"
+        log.info("event=assigned file=%s file_hash=%d size=%d sock=%s strategy=%s",
+                 metadata.file_name, metadata.file_hash, metadata.file_size, sock_path, strategy)
+
         # dispatch via IPC Manager
         self.ipc_manager.send_task(sock_path, metadata.file_path, metadata.file_hash)
-        
+
         # immediately assume WORKING to prevent duplicate assignments in the same loop
         self.sender_states[sock_path] = "WORKING"
-        
+
         # track the active transfer
         if metadata.file_path not in self.active_transfers:
             self.active_transfers[metadata.file_path] = []
