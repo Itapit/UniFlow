@@ -7,5 +7,5 @@ const (
 	MaxShardSize        = 1344
 	MaxBlockSize        = DefaultDataShrads * MaxShardSize
 	ChunkSize           = 134400
-	CounterFilePath     = "../../../shared/counter/"
+	CounterFilePath     = "../shared/counter/"
 )
