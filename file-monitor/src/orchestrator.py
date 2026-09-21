@@ -71,6 +71,35 @@ class Orchestrator:
                 self.finished_large_file_senders.clear()
 
     @staticmethod
+    def _counter_path_for_hash(file_hash: int):
+        from pathlib import Path
+        counter_dir = Path(__file__).resolve().parent.parent.parent / "shared" / "counter"
+        return counter_dir / f"counter_{file_hash}.bin"
+
+    @staticmethod
+    def _remove_counter_file(counter_path, file_hash: int, reason: str) -> None:
+        try:
+            os.remove(counter_path)
+            log.info("event=counter_deleted counter_path=%s file_hash=%d reason=%s",
+                     str(counter_path), file_hash, reason)
+        except FileNotFoundError:
+            log.debug("event=counter_already_gone counter_path=%s file_hash=%d reason=%s",
+                      str(counter_path), file_hash, reason)
+
+    @staticmethod
+    def _reset_counter_for_new_file(file_hash: int) -> None:
+        """Delete any stale shared-counter before a fresh transfer starts.
+
+        Counter files are keyed only by file_hash, so a re-transfer of the
+        same content would otherwise reuse the old value (>=1) and the
+        sender would claim zero blocks (startBlock >= totalBlocks).
+        Must be called exactly once per new file, BEFORE the first
+        send_task — never for large-file joiners while others count.
+        """
+        counter_path = Orchestrator._counter_path_for_hash(file_hash)
+        Orchestrator._remove_counter_file(counter_path, file_hash, reason="pre_dispatch_reset")
+
+    @staticmethod
     def _cleanup_counter(file_path: str) -> None:
         """Remove leftover shared-counter files for a finished transfer.
 
@@ -79,10 +108,8 @@ class Orchestrator:
         the directory accumulates one stale .bin per transfer. We hash here
         rather than trust in-memory metadata so a restart still cleans up.
         """
-        from pathlib import Path
         from src.file_processor import compute_file_hash
 
-        counter_dir = Path(__file__).resolve().parent.parent.parent / "shared" / "counter"
         try:
             file_hash = compute_file_hash(file_path)
         except OSError:
@@ -90,13 +117,8 @@ class Orchestrator:
             # only files that look like orphaned counters is unsafe, so skip.
             log.debug("event=counter_cleanup_skipped path=%s reason=hash_failed", file_path)
             return
-        counter_path = counter_dir / f"counter_{file_hash}.bin"
-        try:
-            os.remove(counter_path)
-            log.info("event=counter_deleted counter_path=%s file_hash=%d", str(counter_path), file_hash)
-        except FileNotFoundError:
-            log.debug("event=counter_already_gone counter_path=%s file_hash=%d",
-                      str(counter_path), file_hash)
+        counter_path = Orchestrator._counter_path_for_hash(file_hash)
+        Orchestrator._remove_counter_file(counter_path, file_hash, reason="post_complete_cleanup")
 
     def _dispatch_tasks(self):
         # greedily assigns files to IDLE senders.
@@ -124,11 +146,17 @@ class Orchestrator:
             metadata = self.task_queue.get()
 
             if metadata.file_size < TEN_MB_BYTES:
-                # Small file: Assign to the first available IDLE sender
+                # Small file: Assign to the first available IDLE sender.
+                # Reset once before dispatch so a stale counter_<hash>.bin
+                # from a previous run/crash can't cause zero-block transfer.
+                self._reset_counter_for_new_file(metadata.file_hash)
                 target_sock = idle_sockets[0]
                 self._assign_task(target_sock, metadata)
             else:
-                # Large file: Assign to ALL currently IDLE senders and set as current
+                # Large file: Assign to ALL currently IDLE senders and set as current.
+                # Reset exactly once BEFORE the first sender starts counting;
+                # joiners (strategy A) must never reset mid-transfer.
+                self._reset_counter_for_new_file(metadata.file_hash)
                 self.current_large_file = metadata
                 for sock in idle_sockets:
                     self._assign_task(sock, metadata)

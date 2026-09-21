@@ -36,7 +36,9 @@ const (
 	// whole and are counted as malformed instead of being truncated.
 	readDatagramSize = 65535
 	// udpReadBuffer sizes the kernel receive buffer against bursts.
-	udpReadBuffer = 8 << 20
+	// 32MB absorbs a full 17MB-file burst (~20k datagrams) even when the
+	// session-manager briefly lags on RS decode.
+	udpReadBuffer = 32 << 20
 	// shutdownGrace caps how long the forwarder may block flushing (for
 	// example while the session-manager is down) before shutdown forces
 	// the session client closed.
@@ -50,9 +52,9 @@ func main() {
 	listenAddr := flag.String("listen", ":1400", "UDP address to listen on (IP:Port)")
 	receiverID := flag.Uint("receiver-id", 1, "Receiver identity reported in every batch")
 	sessionSocket := flag.String("session-socket", "/tmp/uniflow_session.sock", "Session-manager Unix socket path")
-	batchSize := flag.Int("batch-size", 30, "Symbols per batch before forced flush")
-	flushInterval := flag.Duration("flush-interval", 100*time.Millisecond, "Max delay before a partial batch flushes")
-	queueDepth := flag.Int("queue-depth", 1024, "Validated-packet queue between UDP intake and forwarder")
+	batchSize := flag.Int("batch-size", 50, "Symbols per batch before forced flush")
+	flushInterval := flag.Duration("flush-interval", 20*time.Millisecond, "Max delay before a partial batch flushes")
+	queueDepth := flag.Int("queue-depth", 8192, "Validated-packet queue between UDP intake and forwarder")
 	statsInterval := flag.Duration("stats-interval", 30*time.Second, "Interval between stats log lines")
 	flag.Parse()
 

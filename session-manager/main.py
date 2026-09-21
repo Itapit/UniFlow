@@ -36,6 +36,9 @@ def boot_receivers():
             "-listen", params["listen"],
             "-receiver-id", str(receiver_id),
             "-session-socket", SESSION_SOCKET_PATH,
+            "-batch-size", "50",
+            "-flush-interval", "20ms",
+            "-queue-depth", "8192",
         ]
         proc = subprocess.Popen(cmd)
         processes.append(proc)
@@ -56,8 +59,10 @@ if __name__ == "__main__":
     block_assembler = BlockAssembler(
         on_block_assembled=file_tracker.handle_block_assembled,
         rs_helper_socket_path=RS_HELPER_SOCKET_PATH,
+        num_workers=4,
+        max_queue=1024,
     )
-    aggregator = Aggregator(on_block_ready=block_assembler.handle_block_ready)
+    aggregator = Aggregator(on_block_ready=block_assembler.submit_block_ready)
     batch_handler = BatchHandler(aggregator)
     receiver_server = ReceiverServer(SESSION_SOCKET_PATH, on_batch=batch_handler.handle_batch)
 
@@ -78,5 +83,6 @@ if __name__ == "__main__":
             p.wait()
         rs_helper_proc.terminate()
         rs_helper_proc.wait()
+        block_assembler.stop()
         receiver_server.stop()
         log.info("event=offline")

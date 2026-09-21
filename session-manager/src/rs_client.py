@@ -14,28 +14,62 @@ class ReconstructionError(Exception):
 class RSClient:
     """Persistent client to the rs_helper Go subprocess. rs_helper handles
     each connection's requests strictly in order — send one, read its
-    response, then send the next; there's no request ID to multiplex on."""
+    response, then send the next; there's no request ID to multiplex on.
+
+    Thread-safety: one RSClient instance must be used by a single worker
+    thread at a time (or guarded externally). An internal lock serializes
+    concurrent reconstruct() calls and auto-reconnects once on I/O failure
+    so a pooled client survives transient rs_helper restarts.
+    """
 
     def __init__(self, sock_path="/tmp/uniflow_rs_helper.sock"):
+        import threading
         self.sock_path = sock_path
         self._sock = None
+        self._lock = threading.Lock()
 
     def connect(self):
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._sock.connect(self.sock_path)
         log.debug("event=rs_connected socket_path=%s", self.sock_path)
 
+    def ensure_connected(self):
+        if self._sock is None:
+            self.connect()
+
     def close(self):
         if self._sock is not None:
-            self._sock.close()
-            self._sock = None
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+            finally:
+                self._sock = None
             log.debug("event=rs_closed socket_path=%s", self.sock_path)
 
     def reconstruct(self, file_hash: int, block_id: int, k_symbols: int,
-                     n_symbols: int, shards: dict) -> list:
+                      n_symbols: int, shards: dict) -> list:
         """shards maps symbol_id -> content for every shard actually
         received for this block. Returns the k_symbols data shards, in
-        order. Raises ReconstructionError if too many shards were missing."""
+        order. Raises ReconstructionError if too many shards were missing.
+        Reuses the persistent connection; reconnects once on I/O failure."""
+        with self._lock:
+            self.ensure_connected()
+            try:
+                return self._reconstruct_once(
+                    file_hash, block_id, k_symbols, n_symbols, shards)
+            except (ConnectionError, OSError) as e:
+                # Stale/broken connection (e.g. rs_helper restarted):
+                # reconnect once and retry; if that fails, propagate.
+                log.warning("event=rs_reconnect file_hash=%s block_id=%s err=%s",
+                            file_hash, block_id, e)
+                self.close()
+                self.ensure_connected()
+                return self._reconstruct_once(
+                    file_hash, block_id, k_symbols, n_symbols, shards)
+
+    def _reconstruct_once(self, file_hash: int, block_id: int, k_symbols: int,
+                          n_symbols: int, shards: dict) -> list:
         request = rs_helper_pb2.ReconstructRequest(
             file_hash=file_hash, block_id=block_id,
             k_symbols=k_symbols, n_symbols=n_symbols,
