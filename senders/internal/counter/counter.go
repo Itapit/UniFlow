@@ -9,31 +9,31 @@ import (
 )
 
 func Count(counterFile *os.File) (uint64, error) {
-
 	err := unix.Flock(int(counterFile.Fd()), unix.LOCK_EX)
 	if err != nil {
 		return 0, fmt.Errorf("failed to lock file: %w", err)
 	}
 	defer unix.Flock(int(counterFile.Fd()), unix.LOCK_UN)
 
-	buf := make([]byte, 8)
+	buf := make([]byte, CounterSizeInBytes)
 	var currentCount uint64
 
-	counterFile.Seek(0, 0)
-	_, err = counterFile.Read(buf)
-
-	binary.Decode(buf, binary.LittleEndian, &currentCount)
-	if err != nil {
-		return 0, fmt.Errorf("%w", err)
+	if _, err := counterFile.Seek(SeekStartOffset, 0); err != nil {
+		return 0, err
 	}
+	if _, err := counterFile.Read(buf); err != nil {
+		return 0, fmt.Errorf("failed reading counter bytes: %w", err)
+	}
+
+	currentCount = binary.LittleEndian.Uint64(buf)
 	nextCount := currentCount + 1
-	binary.Encode(buf, binary.LittleEndian, nextCount)
+	binary.LittleEndian.PutUint64(buf, nextCount)
 
-	counterFile.Seek(0, 0)
-	_, err = counterFile.Write(buf)
-
-	if err != nil {
-		return currentCount, fmt.Errorf("%w", err)
+	if _, err := counterFile.Seek(SeekStartOffset, 0); err != nil {
+		return currentCount, err
+	}
+	if _, err := counterFile.Write(buf); err != nil {
+		return currentCount, fmt.Errorf("failed writing counter bytes: %w", err)
 	}
 
 	return currentCount, nil

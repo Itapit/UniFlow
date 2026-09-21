@@ -5,36 +5,48 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"time"
+
+	"senders/internal/constants"
+
+	"golang.org/x/sys/unix"
+)
+
+const (
+	CounterSizeInBytes = 8
+	SeekStartOffset    = 0
 )
 
 func InitCounterFile(path string) (*os.File, error) {
-	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, constants.DefaultFileMode)
 	if err == nil {
-		buf := make([]byte, 8)
+		_ = unix.Flock(int(file.Fd()), unix.LOCK_EX)
+		buf := make([]byte, CounterSizeInBytes)
 		binary.LittleEndian.PutUint64(buf, 0)
-		if _, err := file.Write(buf); err != nil {
+		_, writeErr := file.Write(buf)
+		_ = unix.Flock(int(file.Fd()), unix.LOCK_UN)
+
+		if writeErr != nil {
 			file.Close()
-			return nil, err
+			return nil, writeErr
 		}
 		return file, nil
 	}
 
 	if errors.Is(err, os.ErrExist) {
-		f, err := os.OpenFile(path, os.O_RDWR, 0666)
+		f, err := os.OpenFile(path, os.O_RDWR, constants.DefaultFileMode)
 		if err != nil {
 			return nil, err
 		}
 
-		for i := 0; i < 50; i++ {
-			stat, err := f.Stat()
-			if err == nil && stat.Size() >= 8 {
-				return f, nil
-			}
-			time.Sleep(2 * time.Millisecond)
+		_ = unix.Flock(int(f.Fd()), unix.LOCK_SH)
+		stat, statErr := f.Stat()
+		_ = unix.Flock(int(f.Fd()), unix.LOCK_UN)
+
+		if statErr == nil && stat.Size() >= CounterSizeInBytes {
+			return f, nil
 		}
 		return f, nil
 	}
-	
+
 	return nil, fmt.Errorf("failed to open counter file: %w", err)
 }

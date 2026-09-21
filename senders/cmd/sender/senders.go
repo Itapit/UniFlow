@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"time"
 
 	ipc "senders/internal/IPC"
 	"senders/internal/constants"
@@ -19,16 +20,14 @@ import (
 	rd "senders/internal/reader"
 )
 
-const BlocksJump = 8
-
 type EncodedBlock struct {
 	blockIdx uint32
 	shards   [][]byte
 }
 
 func main() {
-	targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
-	socketPath := flag.String("socket", "/tmp/monitor.sock", "Path to Unix domain socket for IPC")
+	targetAddrStr := flag.String("target", constants.DefaultTargetAddr, "Destination UDP address (IP:Port)")
+	socketPath := flag.String("socket", constants.DefaultSocketPath, "Path to Unix domain socket for IPC")
 
 	flag.Parse()
 
@@ -58,12 +57,13 @@ func main() {
 	}
 	defer conn.Close()
 
+	_ = conn.SetWriteBuffer(constants.UDPWriteBufferSize)
+
 	for task := range channel {
 		filePath := task.FilePath
 		fileHash := task.FileHash
 
-		// 1. Initialize a unique counter file per file transfer session using fileHash
-		counterFileName := fmt.Sprintf("counter_%d.bin", fileHash)
+		counterFileName := fmt.Sprintf(constants.CounterFileTemplate, fileHash)
 		counterFilePath := filepath.Join(constants.CounterFilePath, counterFileName)
 
 		counterFile, err := counter.InitCounterFile(counterFilePath)
@@ -73,6 +73,7 @@ func main() {
 
 		reader, err := rd.OpenFile(filePath)
 		if err != nil {
+			counterFile.Close()
 			log.Fatalf("failed opening file %s: %v", filePath, err)
 		}
 
@@ -88,12 +89,12 @@ func main() {
 				break
 			}
 
-			startBlock := uint32(count) * BlocksJump
+			startBlock := uint32(count) * constants.BlocksJump
 			if startBlock >= totalBlocks {
 				break
 			}
 
-			endBlock := startBlock + BlocksJump
+			endBlock := startBlock + constants.BlocksJump
 			if endBlock > totalBlocks {
 				endBlock = totalBlocks
 			}
@@ -112,9 +113,6 @@ func main() {
 					break
 				}
 
-				fmt.Printf("Successfully read Block #%d: %d bytes (Offset: %d)\n", blockIdx, len(data), offset)
-				fmt.Println("------------------------------------------")
-
 				contents, err := rs.EncodeBlock(data)
 				if err != nil {
 					log.Printf("failed encoding block %d: %v", blockIdx, err)
@@ -128,6 +126,8 @@ func main() {
 			}
 
 			totalShardsPerBlock := constants.DefaultDataShrads + constants.DefaultParityShards
+			packetsSentInBatch := 0
+
 			for shardIndex := 0; shardIndex < totalShardsPerBlock; shardIndex++ {
 				for _, b := range batchBlocks {
 					if shardIndex >= len(b.shards) {
@@ -147,7 +147,7 @@ func main() {
 					)
 
 					serializedData, err := pb.FormatPacket(
-						uint64(fileHash),
+						fileHash,
 						b.blockIdx,
 						totalBlocks,
 						uint32(shardIndex),
@@ -158,15 +158,16 @@ func main() {
 						crc,
 					)
 					if err != nil {
-						log.Printf("Error formatting packet: %v", err)
 						continue
 					}
 
-					_, err = conn.Write(serializedData)
-					if err != nil {
+					if _, err = conn.Write(serializedData); err != nil {
 						log.Printf("failed writing packet: %v", err)
-					} else {
-						log.Println("packet sent")
+					}
+
+					packetsSentInBatch++
+					if packetsSentInBatch%constants.PacingBatchThreshold == 0 {
+						time.Sleep(constants.PacingInterval)
 					}
 				}
 			}
