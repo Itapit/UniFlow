@@ -1,6 +1,7 @@
 package ipc
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -36,17 +37,14 @@ func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment, getSt
 		go func(c net.Conn) {
 			defer c.Close()
 
-			buf := make([]byte, 4096)
 			for {
-				n, err := c.Read(buf)
+				payload, err := readFramed(c)
 				if err != nil {
 					if err != io.EOF {
 						log.Printf("Socket read error: %v", err)
 					}
-					break
+					return
 				}
-
-				payload := buf[:n]
 
 				task := &pb.TaskAssignment{}
 				if err := proto.Unmarshal(payload, task); err == nil && task.GetFilePath() != "" {
@@ -56,24 +54,42 @@ func HandleConn(listener net.Listener, taskChan chan<- *pb.TaskAssignment, getSt
 
 				ping := &pb.Ping{}
 				if err := proto.Unmarshal(payload, ping); err == nil {
-					currentState := getState()
-					hb := &pb.Heartbeat{
-						State: currentState,
-					}
-					replyBytes, err := proto.Marshal(hb)
-					if err != nil {
-						log.Printf("Failed to marshal heartbeat: %v", err)
-						continue
-					}
-					if _, err := c.Write(replyBytes); err != nil {
+					hb := &pb.Heartbeat{State: getState()}
+					if err := writeFramed(c, hb); err != nil {
 						log.Printf("Failed to send heartbeat reply: %v", err)
-						break
+						return
 					}
 					continue
 				}
 
-				log.Printf("Received unrecognized protobuf payload (%d bytes)", n)
+				log.Printf("Received unrecognized protobuf payload (%d bytes)", len(payload))
 			}
 		}(conn)
 	}
+}
+
+func readFramed(c net.Conn) ([]byte, error) {
+	header := make([]byte, 4)
+	if _, err := io.ReadFull(c, header); err != nil {
+		return nil, err
+	}
+	payloadLen := binary.BigEndian.Uint32(header)
+	payload := make([]byte, payloadLen)
+	if _, err := io.ReadFull(c, payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func writeFramed(c net.Conn, msg proto.Message) error {
+	payload, err := proto.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	header := make([]byte, 4)
+	binary.BigEndian.PutUint32(header, uint32(len(payload)))
+
+	buffers := net.Buffers{header, payload}
+	_, err = buffers.WriteTo(c)
+	return err
 }
