@@ -5,7 +5,7 @@ import "time"
 const (
 	
 	
-	CounterFilePath     = "../../../shared/counter/"
+	
 	// File paths & formatting
 	DefaultTargetAddr   = "127.0.0.1:1400"
 	DefaultSocketPath   = "/tmp/monitor.sock"
@@ -24,13 +24,10 @@ const (
 	MaxShardSize        = 1344
 	MaxBlockSize        = DefaultDataShrads * MaxShardSize
 	ChunkSize           = 134400
-<<<<<<< HEAD
 
 	// Network & Socket buffer sizing
 	UDPWriteBufferSize = 4 * 1024 * 1024 // 4MB socket send buffer
 	PacingBatchThreshold = 16
 	PacingInterval       = 50 * time.Microsecond
-=======
 	CounterFilePath     = "../shared/counter/"
->>>>>>> e19bfac21fa1821ca6521e681d2c756674395623
 )
