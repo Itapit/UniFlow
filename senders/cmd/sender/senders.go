@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 
 	ipc "senders/internal/IPC"
@@ -28,7 +29,6 @@ type EncodedBlock struct {
 func main() {
 	targetAddrStr := flag.String("target", "127.0.0.1:1400", "Destination UDP address (IP:Port)")
 	socketPath := flag.String("socket", "/tmp/monitor.sock", "Path to Unix domain socket for IPC")
-	counterFileName := flag.String("counter-file", "sender_counter.bin", "counter coordination file")
 
 	flag.Parse()
 
@@ -41,19 +41,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// העברת callback לקריאת הסטטוס בכל פעם שמגיע Ping
 	go ipc.HandleConn(listener, channel, func() pb.SenderState {
 		return pb.SenderState(currentState.Load())
 	})
 
 	defer listener.Close()
 	defer os.Remove(*socketPath)
-
-	counterFile, err := counter.InitCounterFile(constants.CounterFilePath + *counterFileName)
-	if err != nil {
-		log.Fatalf("failed to initialize counter file: %v", err)
-	}
-	defer counterFile.Close()
 
 	addr, err := net.ResolveUDPAddr("udp", *targetAddrStr)
 	if err != nil {
@@ -68,6 +61,15 @@ func main() {
 	for task := range channel {
 		filePath := task.FilePath
 		fileHash := task.FileHash
+
+		// 1. Initialize a unique counter file per file transfer session using fileHash
+		counterFileName := fmt.Sprintf("counter_%d.bin", fileHash)
+		counterFilePath := filepath.Join(constants.CounterFilePath, counterFileName)
+
+		counterFile, err := counter.InitCounterFile(counterFilePath)
+		if err != nil {
+			log.Fatalf("failed to initialize counter file for hash %d: %v", fileHash, err)
+		}
 
 		reader, err := rd.OpenFile(filePath)
 		if err != nil {
@@ -87,7 +89,6 @@ func main() {
 			}
 
 			startBlock := uint32(count) * BlocksJump
-			// אם כל הבלוקים כבר נתפסו, לא נשאר תוכן עבור ה-Sender הזה
 			if startBlock >= totalBlocks {
 				break
 			}
@@ -172,6 +173,7 @@ func main() {
 		}
 
 		reader.Close()
+		counterFile.Close()
 
 		currentState.Store(int32(pb.SenderState_IDLE))
 	}
