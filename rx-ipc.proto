@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package uniflow;
+
+import "packet.proto";
+
+message SymbolBatch {
+  uint32 receiver_id = 1;
+  repeated Packet packets = 2;   // max 30, flushed every 100ms
+}

@@ -2,4 +2,9 @@ module receivers
 
 go 1.27.0
 
-require google.golang.org/protobuf v1.36.12
+require (
+	common v0.0.0-00010101000000-000000000000
+	google.golang.org/protobuf v1.36.12
+)
+
+replace common => ../common
