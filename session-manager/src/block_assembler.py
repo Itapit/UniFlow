@@ -17,7 +17,8 @@ class BlockAssembler:
         self._client_factory = client_factory  # swappable in tests
 
     def handle_block_ready(self, file_hash, block_id, k_symbols, n_symbols,
-                            file_size, total_blocks, shards, contributing_receivers):
+                             file_size, total_blocks, shards, contributing_receivers,
+                             file_name="", file_ext=""):
         client = self._client_factory(self._rs_helper_socket_path)
         client.connect()
         try:
@@ -42,4 +43,5 @@ class BlockAssembler:
         self._on_block_assembled(
             file_hash=file_hash, block_id=block_id, total_blocks=total_blocks,
             block_bytes=block_bytes, contributing_receivers=contributing_receivers,
+            file_name=file_name, file_ext=file_ext,
         )

@@ -17,6 +17,8 @@ func TestFormatPacketAndCRC(t *testing.T) {
 	kSymbols := uint32(100)
 	nSymbols := uint32(50)
 	fileSize := uint64(134400)
+	fileName := "report"
+	fileExt := ".pdf"
 	payload := []byte("packet-payload-test")
 
 	crc := pb.CalculateCRC(
@@ -27,6 +29,8 @@ func TestFormatPacketAndCRC(t *testing.T) {
 		kSymbols,
 		nSymbols,
 		fileSize,
+		fileName,
+		fileExt,
 		payload,
 	)
 
@@ -40,6 +44,8 @@ func TestFormatPacketAndCRC(t *testing.T) {
 		fileSize,
 		payload,
 		crc,
+		fileName,
+		fileExt,
 	)
 	if err != nil {
 		t.Fatalf("FormatPacket returned error: %v", err)
@@ -57,6 +63,8 @@ func TestFormatPacketAndCRC(t *testing.T) {
 		parsed.KSymbols != kSymbols ||
 		parsed.NSymbols != nSymbols ||
 		parsed.FileSize != fileSize ||
+		parsed.FileName != fileName ||
+		parsed.FileExt != fileExt ||
 		parsed.PacketCrc != crc {
 		t.Errorf("Packet metadata or CRC mismatch")
 	}
@@ -73,6 +81,8 @@ func TestFormatPacketAndCRC(t *testing.T) {
 		parsed.KSymbols,
 		parsed.NSymbols,
 		parsed.FileSize,
+		parsed.FileName,
+		parsed.FileExt,
 		parsed.Content,
 	)
 	if recomputedCRC != parsed.PacketCrc {
@@ -87,9 +97,27 @@ func TestFormatPacketAndCRC(t *testing.T) {
 		parsed.KSymbols,
 		parsed.NSymbols,
 		parsed.FileSize,
+		parsed.FileName,
+		parsed.FileExt,
 		parsed.Content,
 	)
 	if corruptedCRC == parsed.PacketCrc {
 		t.Errorf("CRC failed to detect metadata alteration")
+	}
+
+	corruptedNameCRC := pb.CalculateCRC(
+		parsed.FileHash,
+		parsed.BlockId,
+		parsed.TotalBlocks,
+		parsed.SymbolId,
+		parsed.KSymbols,
+		parsed.NSymbols,
+		parsed.FileSize,
+		parsed.FileName+"tampered",
+		parsed.FileExt,
+		parsed.Content,
+	)
+	if corruptedNameCRC == parsed.PacketCrc {
+		t.Errorf("CRC failed to detect file name alteration")
 	}
 }

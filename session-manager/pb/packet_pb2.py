@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cpacket.proto\x12\x07uniflow\"\xb4\x01\n\x06Packet\x12\x11\n\tfile_hash\x18\x01 \x01(\x04\x12\x10\n\x08\x62lock_id\x18\x02 \x01(\r\x12\x14\n\x0ctotal_blocks\x18\x03 \x01(\r\x12\x11\n\tsymbol_id\x18\x04 \x01(\r\x12\x11\n\tk_symbols\x18\x05 \x01(\r\x12\x11\n\tn_symbols\x18\x06 \x01(\r\x12\x11\n\tfile_size\x18\x07 \x01(\x04\x12\x0f\n\x07\x63ontent\x18\x08 \x01(\x0c\x12\x12\n\npacket_crc\x18\t \x01(\rB\x06Z\x04./pbb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0cpacket.proto\x12\x07uniflow\"\xd9\x01\n\x06Packet\x12\x11\n\tfile_hash\x18\x01 \x01(\x04\x12\x10\n\x08\x62lock_id\x18\x02 \x01(\r\x12\x14\n\x0ctotal_blocks\x18\x03 \x01(\r\x12\x11\n\tsymbol_id\x18\x04 \x01(\r\x12\x11\n\tk_symbols\x18\x05 \x01(\r\x12\x11\n\tn_symbols\x18\x06 \x01(\r\x12\x11\n\tfile_size\x18\x07 \x01(\x04\x12\x0f\n\x07\x63ontent\x18\x08 \x01(\x0c\x12\x12\n\npacket_crc\x18\t \x01(\r\x12\x11\n\tfile_name\x18\n \x01(\t\x12\x10\n\x08\x66ile_ext\x18\x0b \x01(\tB\x06Z\x04./pbb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,5 +33,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z\004./pb'
   _globals['_PACKET']._serialized_start=26
-  _globals['_PACKET']._serialized_end=206
+  _globals['_PACKET']._serialized_end=243
 # @@protoc_insertion_point(module_scope)

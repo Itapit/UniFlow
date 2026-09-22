@@ -13,4 +13,6 @@ message Packet {
   uint64 file_size     = 7; // Full original file size in bytes (for padding truncation)
   bytes  content       = 8; // Raw binary payload (< 1400 bytes)
   uint32 packet_crc    = 9; // CRC32 checksum to detect bit flips before FEC decoding
+  string file_name     = 10; // Original file stem without extension, basename only (e.g. "report")
+  string file_ext      = 11; // Original file extension with leading dot (e.g. ".pdf"), "" if none
 }

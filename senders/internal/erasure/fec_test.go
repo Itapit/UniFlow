@@ -45,6 +45,8 @@ func TestEncodeAndVerifyIntegrity(t *testing.T) {
 			uint32(constants.DefaultDataShrads),
 			uint32(constants.DefaultParityShards),
 			fileSize,
+			"transfer_sample",
+			".bin",
 			shard,
 		)
 		if crc == 0 {

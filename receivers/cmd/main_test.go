@@ -60,6 +60,8 @@ func marshalValidPacket(t *testing.T, packet *pb.Packet) []byte {
 		packet.GetKSymbols(),
 		packet.GetNSymbols(),
 		packet.GetFileSize(),
+		packet.GetFileName(),
+		packet.GetFileExt(),
 		packet.GetContent(),
 	)
 	return marshalPacket(t, packet)
@@ -80,6 +82,8 @@ func TestReadLoopAcceptsValidPacket(t *testing.T) {
 		FileHash: 999,
 		BlockId:  3,
 		SymbolId: 7,
+		FileName: "report",
+		FileExt:  ".pdf",
 		Content:  content,
 	}))
 
@@ -87,6 +91,9 @@ func TestReadLoopAcceptsValidPacket(t *testing.T) {
 	case packet := <-intake:
 		if packet.GetFileHash() != 999 || packet.GetBlockId() != 3 || packet.GetSymbolId() != 7 {
 			t.Fatalf("wrong packet forwarded: %+v", packet)
+		}
+		if packet.GetFileName() != "report" || packet.GetFileExt() != ".pdf" {
+			t.Fatalf("file name not forwarded: %+v", packet)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("valid packet never reached intake")
@@ -118,7 +125,7 @@ func TestReadLoopDropsBadPackets(t *testing.T) {
 	sendDatagram(t, listenAddr, marshalPacket(t, &pb.Packet{
 		FileHash:  1,
 		Content:   content,
-		PacketCrc: integrity.ChecksumPacket(1, 0, 0, 0, 0, 0, 0, content) + 1,
+		PacketCrc: integrity.ChecksumPacket(1, 0, 0, 0, 0, 0, 0, "", "", content) + 1,
 	}))
 	// Truncated varint: invalid protobuf.
 	sendDatagram(t, listenAddr, []byte{0xff, 0xff, 0xff, 0xff, 0xff})
@@ -174,6 +181,8 @@ func TestReadLoopDropsMetadataCorruption(t *testing.T) {
 		corruptedPacket.GetKSymbols(),
 		corruptedPacket.GetNSymbols(),
 		corruptedPacket.GetFileSize(),
+		corruptedPacket.GetFileName(),
+		corruptedPacket.GetFileExt(),
 		corruptedPacket.GetContent(),
 	)
 	corruptedPacket.SymbolId = 10

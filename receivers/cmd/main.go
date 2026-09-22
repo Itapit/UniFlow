@@ -162,6 +162,8 @@ func readLoop(udpConn *net.UDPConn, intake chan<- *pb.Packet, counters *stats.Co
 			packet.GetKSymbols(),
 			packet.GetNSymbols(),
 			packet.GetFileSize(),
+			packet.GetFileName(),
+			packet.GetFileExt(),
 			packet.GetContent(),
 			packet.GetPacketCrc(),
 		) {

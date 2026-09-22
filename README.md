@@ -92,7 +92,7 @@ Loss tolerance is governed by an $(N, K)$ Reed-Solomon Erasure Coding matrix ove
 
 Data integrity is validated across two isolated layers:
 
-* **L1 Packet Boundary (CRC32):** Every UDP packet encapsulates an IEEE 802.3 CRC32 checksum in `packet_crc`. Receivers evaluate this checksum upon kernel socket read. Packets altered by physical link bit flips are dropped immediately to prevent mathematical poisoning of the inversion matrix.
+* **L1 Packet Boundary (CRC32):** Every UDP packet encapsulates an IEEE 802.3 CRC32 checksum in `packet_crc`. The checksum covers all packet metadata (including `file_name`/`file_ext`) plus `content`. Receivers evaluate this checksum upon kernel socket read. Packets altered by physical link bit flips are dropped immediately to prevent mathematical poisoning of the inversion matrix.
 * **L2 Object Boundary (Cryptographic Hash):** The entire reconstructed byte sequence is hashed upon completion (SHA-256 / 64-bit digest) and compared against `file_hash` to ensure byte-perfect parity with the source file.
 
 ---
@@ -116,7 +116,9 @@ message Packet {
   uint32 n_symbols    = 6; // Total symbols transmitted per block (N = K + M)
   uint64 file_size    = 7; // Exact unpadded file size in bytes for truncation
   bytes  content      = 8; // Raw binary payload (<= 1400 bytes, MTU safe)
-  uint32 packet_crc   = 9; // CRC32 checksum of content bytes
+  uint32 packet_crc   = 9; // CRC32 checksum over metadata (incl. file_name/file_ext) + content
+  string file_name    = 10; // Original file stem without extension, basename only (e.g. "report")
+  string file_ext     = 11; // Original file extension with leading dot (e.g. ".pdf"), "" if none
 }
 ```
 

@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -80,6 +81,14 @@ func main() {
 		readerSize := reader.Size()
 		totalBlocks := uint32((readerSize + constants.BlockSize - 1) / constants.BlockSize)
 
+		// Derive the basename once per task and split stem/ext so every
+		// packet carries the original file name for the receiver.
+		// filepath.Ext keeps the leading dot ("archive.tar.gz" -> ".gz");
+		// files without extension or dotfiles yield ext == "".
+		baseName := filepath.Base(filePath)
+		fileExt := filepath.Ext(baseName)
+		fileName := strings.TrimSuffix(baseName, fileExt)
+
 		currentState.Store(int32(pb.SenderState_WORKING))
 
 		for {
@@ -134,29 +143,33 @@ func main() {
 						continue
 					}
 
-					content := b.shards[shardIndex]
-					crc := pb.CalculateCRC(
-						fileHash,
-						b.blockIdx,
-						totalBlocks,
-						uint32(shardIndex),
-						uint32(constants.DefaultDataShrads),                              // kSymbols
+				content := b.shards[shardIndex]
+				crc := pb.CalculateCRC(
+					fileHash,
+					b.blockIdx,
+					totalBlocks,
+					uint32(shardIndex),
+					uint32(constants.DefaultDataShrads),                              // kSymbols
                         uint32(constants.DefaultDataShrads+constants.DefaultParityShards), // nSymbols — 150
-						uint64(readerSize),
-						content,
-					)
+					uint64(readerSize),
+					fileName,
+					fileExt,
+					content,
+				)
 
-					serializedData, err := pb.FormatPacket(
-						fileHash,
-						b.blockIdx,
-						totalBlocks,
-						uint32(shardIndex),
-						uint32(constants.DefaultDataShrads),                              // kSymbols
+				serializedData, err := pb.FormatPacket(
+					fileHash,
+					b.blockIdx,
+					totalBlocks,
+					uint32(shardIndex),
+					uint32(constants.DefaultDataShrads),                              // kSymbols
                         uint32(constants.DefaultDataShrads+constants.DefaultParityShards), // nSymbols — 150
-						uint64(readerSize),
-						content,
-						crc,
-					)
+					uint64(readerSize),
+					content,
+					crc,
+					fileName,
+					fileExt,
+				)
 					if err != nil {
 						continue
 					}

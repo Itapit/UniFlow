@@ -33,12 +33,24 @@ class Aggregator:
             shards = self._pending_shards[key]
             if packet.symbol_id not in shards:
                 shards[packet.symbol_id] = packet.content
-                self._pending_meta[key] = {
-                    "k_symbols": packet.k_symbols,
-                    "n_symbols": packet.n_symbols,
-                    "file_size": packet.file_size,
-                    "total_blocks": packet.total_blocks,
-                }
+                if key not in self._pending_meta:
+                    self._pending_meta[key] = {
+                        "k_symbols": packet.k_symbols,
+                        "n_symbols": packet.n_symbols,
+                        "file_size": packet.file_size,
+                        "total_blocks": packet.total_blocks,
+                        "file_name": getattr(packet, "file_name", ""),
+                        "file_ext": getattr(packet, "file_ext", ""),
+                    }
+                else:
+                    # First-seen wins: same file_hash must carry the same
+                    # name on every packet; warn if a sender disagrees.
+                    meta = self._pending_meta[key]
+                    if (getattr(packet, "file_name", "") != meta["file_name"] or
+                            getattr(packet, "file_ext", "") != meta["file_ext"]):
+                        print(f"[Aggregator] name conflict for file_hash={packet.file_hash}: "
+                              f"keeping {meta['file_name']!r}+{meta['file_ext']!r}, "
+                              f"ignoring {getattr(packet, 'file_name', '')!r}+{getattr(packet, 'file_ext', '')!r}")
             self._contributing_receivers[key].add(receiver_id)
 
             if len(shards) < packet.k_symbols:
@@ -61,6 +73,8 @@ class Aggregator:
             n_symbols=meta["n_symbols"],
             file_size=meta["file_size"],
             total_blocks=meta["total_blocks"],
+            file_name=meta["file_name"],
+            file_ext=meta["file_ext"],
             shards=shards,
             contributing_receivers=receivers,
         )

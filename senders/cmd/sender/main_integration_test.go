@@ -114,29 +114,33 @@ func TestEndToEndSenderWorkflow(t *testing.T) {
 					return
 				}
 
-				for shardIdx, content := range shards {
-					crc := pb.CalculateCRC(
-						task.FileHash,
-						blockIdx,
-						totalBlocks,
-						uint32(shardIdx),
-						uint32(constants.DefaultDataShrads),
-						uint32(constants.DefaultParityShards),
-						uint64(readerSize),
-						content,
-					)
+			for shardIdx, content := range shards {
+				crc := pb.CalculateCRC(
+					task.FileHash,
+					blockIdx,
+					totalBlocks,
+					uint32(shardIdx),
+					uint32(constants.DefaultDataShrads),
+					uint32(constants.DefaultParityShards),
+					uint64(readerSize),
+					"transfer_sample",
+					".bin",
+					content,
+				)
 
-					pktBytes, err := pb.FormatPacket(
-						task.FileHash,
-						blockIdx,
-						totalBlocks,
-						uint32(shardIdx),
-						uint32(constants.DefaultDataShrads),
-						uint32(constants.DefaultParityShards),
-						uint64(readerSize),
-						content,
-						crc,
-					)
+				pktBytes, err := pb.FormatPacket(
+					task.FileHash,
+					blockIdx,
+					totalBlocks,
+					uint32(shardIdx),
+					uint32(constants.DefaultDataShrads),
+					uint32(constants.DefaultParityShards),
+					uint64(readerSize),
+					content,
+					crc,
+					"transfer_sample",
+					".bin",
+				)
 					if err != nil {
 						errChan <- fmt.Errorf("format packet failed: %w", err)
 						return
@@ -183,6 +187,8 @@ func TestEndToEndSenderWorkflow(t *testing.T) {
 		receivedPacket.KSymbols,
 		receivedPacket.NSymbols,
 		receivedPacket.FileSize,
+		receivedPacket.FileName,
+		receivedPacket.FileExt,
 		receivedPacket.Content,
 	)
 

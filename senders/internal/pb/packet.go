@@ -18,8 +18,10 @@ func FormatPacket(
 	fileSize      uint64 ,                
 	content       []byte ,                                             
 	packetCrc     uint32 ,                
+	fileName      string ,
+	fileExt       string ,
 
- ) ([]byte,error){
+  ) ([]byte,error){
 
 	packet:=&Packet{
 		FileHash:fileHash ,                        
@@ -31,6 +33,8 @@ func FormatPacket(
 		FileSize:fileSize ,                
 		Content:content ,                                             
 		PacketCrc:packetCrc ,  
+		FileName:fileName ,
+		FileExt:fileExt ,
 	}
 	data,err:=proto.Marshal(packet)
 	if err != nil {
@@ -48,6 +52,8 @@ func CalculateCRC(
 	kSymbols uint32,
 	nSymbols uint32,
 	fileSize uint64,
+	fileName string,
+	fileExt string,
 	content []byte,
 ) uint32 {
 	table := crc32.MakeTable(crc32.Castagnoli)
@@ -64,6 +70,13 @@ func CalculateCRC(
 	binary.LittleEndian.PutUint64(metaBuf[28:36], fileSize)
 
 	h.Write(metaBuf[:])
+	var lenBuf [4]byte
+	binary.LittleEndian.PutUint32(lenBuf[:], uint32(len(fileName)))
+	h.Write(lenBuf[:])
+	h.Write([]byte(fileName))
+	binary.LittleEndian.PutUint32(lenBuf[:], uint32(len(fileExt)))
+	h.Write(lenBuf[:])
+	h.Write([]byte(fileExt))
 	h.Write(content)
 
 	return h.Sum32()

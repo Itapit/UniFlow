@@ -60,3 +60,16 @@ if __name__ == "__main__":
     print("test_does_not_trim_a_non_last_block: OK")
     test_reconstruction_failure_does_not_call_back_or_raise()
     print("test_reconstruction_failure_does_not_call_back_or_raise: OK")
+    test_forwards_file_name_to_block_assembled()
+    print("test_forwards_file_name_to_block_assembled: OK")
+
+
+def test_forwards_file_name_to_block_assembled():
+    data_shards = [b"a" * 1344 for _ in range(100)]
+    results = []
+    assembler = BlockAssembler(lambda **kw: results.append(kw), client_factory=make_factory(data_shards))
+    assembler.handle_block_ready(file_hash=1, block_id=0, k_symbols=100, n_symbols=150,
+                                  file_size=500000, total_blocks=4, shards={}, contributing_receivers={1},
+                                  file_name="movie", file_ext=".mkv")
+    assert results[0]["file_name"] == "movie"
+    assert results[0]["file_ext"] == ".mkv"

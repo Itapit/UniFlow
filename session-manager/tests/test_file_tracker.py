@@ -69,3 +69,17 @@ if __name__ == "__main__":
     print("test_stray_block_after_completion_is_ignored: OK")
     test_thread_safety_fires_exactly_once_under_concurrency()
     print("test_thread_safety_fires_exactly_once_under_concurrency: OK")
+    test_forwards_file_name_to_on_file_complete()
+    print("test_forwards_file_name_to_on_file_complete: OK")
+
+
+def test_forwards_file_name_to_on_file_complete():
+    results = []
+    tracker = FileTracker(on_file_complete=lambda **kw: results.append(kw))
+
+    tracker.handle_block_assembled(file_hash=8, block_id=0, total_blocks=1, block_bytes=b"DATA",
+                                    contributing_receivers={1},
+                                    file_name="photo", file_ext=".png")
+    assert len(results) == 1
+    assert results[0]["file_name"] == "photo"
+    assert results[0]["file_ext"] == ".png"

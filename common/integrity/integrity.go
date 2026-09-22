@@ -20,7 +20,8 @@ var castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
 const packetHeaderSize = 36
 
 // ChecksumPacket returns the CRC32-Castagnoli checksum over the packet
-// metadata followed by the content. The metadata layout is fixed and
+// metadata followed by the file name, the file extension, and the
+// content. The metadata layout is fixed and
 // is itself the contract any reimplementation (for example the sender
 // side) must replicate byte for byte:
 //
@@ -32,7 +33,9 @@ const packetHeaderSize = 36
 //	20      4     data symbols per block (packet.proto: k_symbols)
 //	24      4     total symbols per block (packet.proto: n_symbols)
 //	28      8     file size (packet.proto: file_size)
-//	36      ...   raw content bytes
+//	36      4     file name length N (uint32 LE) + N raw UTF-8 bytes (packet.proto: file_name)
+//	...     4     file ext length M (uint32 LE) + M raw UTF-8 bytes (packet.proto: file_ext)
+//	...     ...   raw content bytes
 //
 // The packet_crc field itself is excluded: it carries the checksum.
 func ChecksumPacket(
@@ -43,6 +46,8 @@ func ChecksumPacket(
 	dataSymbols uint32,
 	totalSymbols uint32,
 	fileSize uint64,
+	fileName string,
+	fileExt string,
 	content []byte,
 ) uint32 {
 	var header [packetHeaderSize]byte
@@ -55,6 +60,13 @@ func ChecksumPacket(
 	binary.LittleEndian.PutUint64(header[28:36], fileSize)
 
 	crc := crc32.Checksum(header[:], castagnoliTable)
+	var lenBuf [4]byte
+	binary.LittleEndian.PutUint32(lenBuf[:], uint32(len(fileName)))
+	crc = crc32.Update(crc, castagnoliTable, lenBuf[:])
+	crc = crc32.Update(crc, castagnoliTable, []byte(fileName))
+	binary.LittleEndian.PutUint32(lenBuf[:], uint32(len(fileExt)))
+	crc = crc32.Update(crc, castagnoliTable, lenBuf[:])
+	crc = crc32.Update(crc, castagnoliTable, []byte(fileExt))
 	return crc32.Update(crc, castagnoliTable, content)
 }
 
@@ -68,8 +80,10 @@ func VerifyPacket(
 	dataSymbols uint32,
 	totalSymbols uint32,
 	fileSize uint64,
+	fileName string,
+	fileExt string,
 	content []byte,
 	checksum uint32,
 ) bool {
-	return ChecksumPacket(fileHash, blockID, totalBlocks, symbolID, dataSymbols, totalSymbols, fileSize, content) == checksum
+	return ChecksumPacket(fileHash, blockID, totalBlocks, symbolID, dataSymbols, totalSymbols, fileSize, fileName, fileExt, content) == checksum
 }

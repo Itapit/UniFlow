@@ -63,3 +63,80 @@ if __name__ == "__main__":
     print("test_corrupted_file_is_not_written: OK")
     test_creates_output_dir_if_missing()
     print("test_creates_output_dir_if_missing: OK")
+    test_writes_file_under_original_name()
+    print("test_writes_file_under_original_name: OK")
+    test_sanitizes_traversal_in_name()
+    print("test_sanitizes_traversal_in_name: OK")
+    test_dedupes_colliding_names()
+    print("test_dedupes_colliding_names: OK")
+    test_empty_name_falls_back_to_hash()
+    print("test_empty_name_falls_back_to_hash: OK")
+
+
+def test_writes_file_under_original_name():
+    file_bytes = b"some pdf content"
+    file_hash = compute_reference_hash(file_bytes)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        written = []
+        writer = FileWriter(output_dir, on_file_written=lambda **kw: written.append(kw))
+
+        writer.handle_file_complete(file_hash=file_hash, total_blocks=1,
+                                     file_bytes=file_bytes, contributing_receivers={1},
+                                     file_name="report", file_ext=".pdf")
+
+        expected_path = os.path.join(output_dir, "report.pdf")
+        assert os.path.exists(expected_path)
+        with open(expected_path, "rb") as f:
+            assert f.read() == file_bytes
+        assert written[0]["output_path"] == expected_path
+
+
+def test_sanitizes_traversal_in_name():
+    file_bytes = b"evil content"
+    file_hash = compute_reference_hash(file_bytes)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        writer = FileWriter(output_dir)
+        writer.handle_file_complete(file_hash=file_hash, total_blocks=1,
+                                     file_bytes=file_bytes, contributing_receivers={1},
+                                     file_name="../../etc/passwd", file_ext="")
+
+        assert os.path.exists(os.path.join(output_dir, "passwd"))
+        # Nothing escaped the output dir: only the sanitized file is there.
+        assert os.listdir(output_dir) == ["passwd"]
+
+
+def test_dedupes_colliding_names():
+    first_bytes = b"first file"
+    second_bytes = b"second file"
+    first_hash = compute_reference_hash(first_bytes)
+    second_hash = compute_reference_hash(second_bytes)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        writer = FileWriter(output_dir)
+        writer.handle_file_complete(file_hash=first_hash, total_blocks=1,
+                                     file_bytes=first_bytes, contributing_receivers={1},
+                                     file_name="report", file_ext=".pdf")
+        writer.handle_file_complete(file_hash=second_hash, total_blocks=1,
+                                     file_bytes=second_bytes, contributing_receivers={1},
+                                     file_name="report", file_ext=".pdf")
+
+        assert os.path.exists(os.path.join(output_dir, "report.pdf"))
+        suffixed = os.path.join(output_dir, f"report_{second_hash & 0xFFFFFFFF:08x}.pdf")
+        assert os.path.exists(suffixed)
+        with open(suffixed, "rb") as f:
+            assert f.read() == second_bytes
+
+
+def test_empty_name_falls_back_to_hash():
+    file_bytes = b"nameless content"
+    file_hash = compute_reference_hash(file_bytes)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        writer = FileWriter(output_dir)
+        writer.handle_file_complete(file_hash=file_hash, total_blocks=1,
+                                     file_bytes=file_bytes, contributing_receivers={1},
+                                     file_name="", file_ext="")
+
+        assert os.path.exists(os.path.join(output_dir, f"{file_hash}.bin"))
