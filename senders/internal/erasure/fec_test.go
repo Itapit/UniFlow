@@ -29,13 +29,11 @@ func TestEncodeAndVerifyIntegrity(t *testing.T) {
 		t.Fatalf("Expected %d shards, got %d", totalShards, len(encodedShards))
 	}
 
-	// Mock metadata to match the new CalculateCRC signature
 	fileHash := uint64(0xABCDEF1234567890)
 	blockId := uint32(0)
 	totalBlocks := uint32(1)
 	fileSize := uint64(originalSize)
 
-	// 1. Verify CRC calculation for each shard with metadata
 	for shardIdx, shard := range encodedShards {
 		crc := pb.CalculateCRC(
 			fileHash,
@@ -52,7 +50,6 @@ func TestEncodeAndVerifyIntegrity(t *testing.T) {
 		}
 	}
 
-	// 2. Simulate maximum allowable packet loss: erase first N parity shards
 	for i := 0; i < constants.DefaultParityShards; i++ {
 		encodedShards[i] = nil
 	}
@@ -67,7 +64,6 @@ func TestEncodeAndVerifyIntegrity(t *testing.T) {
 		t.Fatalf("Reconstruct failed: %v", err)
 	}
 
-	// 3. Recombine data shards and trim padding
 	var reconstructed bytes.Buffer
 	for i := 0; i < constants.DefaultDataShrads; i++ {
 		reconstructed.Write(encodedShards[i])
